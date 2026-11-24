@@ -1,0 +1,34 @@
+{
+  "document_id": "DOC-CIVIC-002",
+  "title": "Riverfront Cultural Heritage & Acoustic Performance Guidelines (Kolkata Port & Waterfront)",
+  "short_title": "Kolkata Riverfront Heritage Guidelines",
+  "jurisdiction": "Kolkata Municipal Corporation & Heritage Cell (Sample Guidelines)",
+  "effective_date": "2026-01-10",
+  "version": "2026.1-DEMO",
+  "document_status": "UNVERIFIED_SAMPLE_GUIDANCE_FOR_SIMULATION_ONLY",
+  "source_file": "backend/data/civic_guidelines/DOC-CIVIC-002_kolkata_riverfront_heritage_precincts.json",
+  "applicable_regions": ["Kolkata", "South Waterfront", "Hooghly Riverfront", "Prinsep Ghat"],
+  "applicable_venue_types": ["Historic Brick Amphitheater", "Acoustic Glasshouse", "Waterfront Promenade"],
+  "legal_disclaimer": "This document is unverified sample guidance created for STAGE software simulation only. It does NOT represent statutory legislation, official municipal orders, or authoritative legal advice. All organizers must independently verify rules with local authorities.",
+  "sections": [
+    {
+      "section_id": "SEC-1.1",
+      "heading": "Riverfront Enclosure & Structural Integrity",
+      "content": "Cultural assemblies organized in proximity to masonry structures and brick amphitheaters along Kolkata waterfront promenades must maintain clear 6-meter emergency corridors to tidal embankments.",
+      "keywords": ["kolkata", "waterfront", "brick", "masonry", "riverfront"]
+    },
+    {
+      "section_id": "SEC-2.1",
+      "heading": "Curfew & Sound Thresholds for Riverbank Precincts",
+      "content": "Outdoor performances on waterfront steps must adhere to a 10:00 PM unverified sample curfew boundary. Sound amplification is restricted to 55 dB(A) at the property line to prevent sound reflections across the water channel.",
+      "keywords": ["curfew", "noise", "10:00 pm", "sound", "decibel", "riverbank"]
+    },
+    {
+      "section_id": "SEC-3.1",
+      "heading": "Heritage Ward Administration & Police Clearance",
+      "content": "Event applications must be registered with the relevant Borough Executive Officer at least 14 days in advance. Requires written verification from the river traffic police for evening events with expected attendance over 100.",
+      "keywords": ["borough", "police", "lead time", "14 days", "application"]
+    }
+  ]
+}
+

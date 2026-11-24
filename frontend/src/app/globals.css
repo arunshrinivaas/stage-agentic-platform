@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FAFAF7;
+  --foreground: #191817;
+  --surface: #F4F2EC;
+  --surface-hover: #ECEAE1;
+  --surface-card: #FFFFFF;
+  --border-subtle: #E8E5DC;
+  --border-strong: #D5D1C6;
+  --terracotta: #C85A32;
+  --terracotta-hover: #B54D27;
+  --terracotta-light: #FBF0EB;
+  --terracotta-muted: #E68A68;
+  --muted-text: #6B665E;
+  --subtle-text: #8E897F;
+  --font-serif: "Newsreader", "Playfair Display", "Iowan Old Style", "Charter", "Georgia", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-card: var(--surface-card);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-hover: var(--terracotta-hover);
+  --color-terracotta-light: var(--terracotta-light);
+  --color-terracotta-muted: var(--terracotta-muted);
+  --color-muted-text: var(--muted-text);
+  --color-subtle-text: var(--subtle-text);
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editorial styling utilities */
+.font-editorial {
+  font-family: var(--font-serif);
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-text);
+}

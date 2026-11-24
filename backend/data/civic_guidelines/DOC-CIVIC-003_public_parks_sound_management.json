@@ -1,0 +1,34 @@
+{
+  "document_id": "DOC-CIVIC-003",
+  "title": "Municipal Botanical Parks & Civic Esplanades Event Protocols",
+  "short_title": "Public Parks & Esplanades Protocols",
+  "jurisdiction": "Department of Parks & Urban Commons (Sample Planning Directives)",
+  "effective_date": "2026-02-01",
+  "version": "2026.1-DEMO",
+  "document_status": "UNVERIFIED_SAMPLE_GUIDANCE_FOR_SIMULATION_ONLY",
+  "source_file": "backend/data/civic_guidelines/DOC-CIVIC-003_public_parks_sound_management.json",
+  "applicable_regions": ["New Delhi", "Mumbai", "Kolkata", "Bengaluru", "Chennai"],
+  "applicable_venue_types": ["Open-Air Terraced Courtyard", "Municipal Park", "Botanical Commons", "Public Garden"],
+  "legal_disclaimer": "This document is unverified sample guidance created for STAGE software simulation only. It does NOT represent statutory legislation, official municipal orders, or authoritative legal advice. All organizers must independently verify rules with local authorities.",
+  "sections": [
+    {
+      "section_id": "SEC-1.1",
+      "heading": "General Public Grounds Access Policy",
+      "content": "Public parks and botanical gardens are designated community commons. Non-commercial performances, grassroots theatre, and acoustic music gatherings receive fee exemptions when partnered with verified social-impact causes.",
+      "keywords": ["park", "public", "garden", "commons", "esplanade", "free"]
+    },
+    {
+      "section_id": "SEC-2.2",
+      "heading": "Fauna Protection Quiet Hours & Early Curfew",
+      "content": "Due to avian and local fauna habitat protections, public park performances must terminate sound amplification strictly by 9:30 PM. Maximum permitted sound intensity is 50 dB(A) at garden perimeter.",
+      "keywords": ["park", "curfew", "9:30 pm", "fauna", "decibel", "sound", "noise"]
+    },
+    {
+      "section_id": "SEC-3.3",
+      "heading": "Lawn Preservation & Power Supply Protocols",
+      "content": "Heavy vehicles and diesel generators are prohibited inside central lawns. Solar-powered battery audio banks or venue tie-in power connections are required for all staged sound systems.",
+      "keywords": ["lawn", "generator", "solar", "battery", "preservation"]
+    }
+  ]
+}
+

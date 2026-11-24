@@ -1,0 +1,34 @@
+{
+  "document_id": "DOC-CIVIC-004",
+  "title": "Private Indoor Theatres, Listening Rooms & Acoustic Studios Best Practice Guide",
+  "short_title": "Private Acoustic Spaces Guide",
+  "jurisdiction": "STAGE Association of Independent Performing Spaces (Industry Standard Operating Practice)",
+  "effective_date": "2026-01-20",
+  "version": "2026.1-DEMO",
+  "document_status": "UNVERIFIED_SAMPLE_GUIDANCE_FOR_SIMULATION_ONLY",
+  "source_file": "backend/data/civic_guidelines/DOC-CIVIC-004_private_acoustic_venues_operating_procedures.json",
+  "applicable_regions": ["Bengaluru", "Mumbai", "Kolkata", "Chennai", "New Delhi"],
+  "applicable_venue_types": ["Intimate Underground Listening Room", "Daylit Industrial Warehouse", "Acoustic Cellar", "Loft Studio"],
+  "legal_disclaimer": "This document is unverified sample guidance created for STAGE software simulation only. It does NOT represent statutory legislation, official municipal orders, or authoritative legal advice. All organizers must independently verify rules with local authorities.",
+  "sections": [
+    {
+      "section_id": "SEC-1.1",
+      "heading": "Host Venue Agreement & Commercial Clearances",
+      "content": "For indoor venues operating under private stewardship, the primary contractual framework is the Host Venue Agreement. Host manages primary structural fire and building occupancy clearances; performing artist provides technical rider and input channel list.",
+      "keywords": ["private", "studio", "loft", "cellar", "agreement", "host"]
+    },
+    {
+      "section_id": "SEC-2.1",
+      "heading": "Acoustic Envelope & Indoor Curfews",
+      "content": "Indoor isolated listening rooms with sound baffling may operate performances up to 11:00 PM, provided noise transmission to neighboring exterior premises does not exceed 40 dB(A) Leq at the property boundary.",
+      "keywords": ["indoor", "curfew", "11:00 pm", "soundproof", "acoustic", "envelope"]
+    },
+    {
+      "section_id": "SEC-3.2",
+      "heading": "Emergency Exits & Fire Capacity Safety",
+      "content": "Basement and warehouse spaces must keep emergency exit panic hardware illuminated and unblocked. Standing room capacity must never exceed 1.5x seated capacity under standard civic fire codes.",
+      "keywords": ["fire", "exit", "safety", "emergency", "capacity"]
+    }
+  ]
+}
+

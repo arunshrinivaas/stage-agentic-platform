@@ -1,0 +1,40 @@
+{
+  "document_id": "DOC-CIVIC-001",
+  "title": "Coastal Zone & Heritage Open-Air Performance Guidelines (Chennai Metropolitan Region)",
+  "short_title": "Chennai Coastal Heritage Guidelines",
+  "jurisdiction": "Greater Chennai Corporation & Heritage Conservation Committee (Sample Guidelines)",
+  "effective_date": "2026-01-15",
+  "version": "2026.1-DEMO",
+  "document_status": "UNVERIFIED_SAMPLE_GUIDANCE_FOR_SIMULATION_ONLY",
+  "source_file": "backend/data/civic_guidelines/DOC-CIVIC-001_chennai_coastal_heritage_regulations.json",
+  "applicable_regions": ["Chennai", "Mylapore", "Santhome", "Thiruvanmiyur", "Besant Nagar"],
+  "applicable_venue_types": ["Open-Air Seaside Amphitheatre", "Teakwood Open-Air Mandapam", "Heritage Coastal Pavilion"],
+  "legal_disclaimer": "This document is unverified sample guidance created for STAGE software simulation only. It does NOT represent statutory legislation, official municipal orders, or authoritative legal advice. All organizers must independently verify rules with local authorities.",
+  "sections": [
+    {
+      "section_id": "SEC-1.1",
+      "heading": "Scope & Zonal Applicability",
+      "content": "Applies to cultural performances, chamber acoustic recitals, and community gatherings within coastal heritage envelopes and civic open spaces in Chennai, including Mylapore Waterfront and Thiruvanmiyur heritage corridors.",
+      "keywords": ["chennai", "mylapore", "coastal", "heritage", "amphitheatre"]
+    },
+    {
+      "section_id": "SEC-2.3",
+      "heading": "Acoustic Decibel Thresholds & Nighttime Silence Hours",
+      "content": "All amplified musical performances must conclude strictly prior to the 10:00 PM unverified sample curfew boundary. Sound pressure levels shall not exceed 55 dB(A) measured at the venue perimeter during dusk hours (6:00 PM - 9:00 PM) and 45 dB(A) after 9:00 PM. Sound reinforcement must utilize focused directional acoustic shells rather than dispersed horn arrays.",
+      "keywords": ["curfew", "noise", "decibel", "sound", "10:00 pm", "acoustic shell", "amplification"]
+    },
+    {
+      "section_id": "SEC-3.2",
+      "heading": "Clearance Chain & Statutory Lead Times",
+      "content": "A minimum lead time of 21 calendar days is recommended for public heritage parcels. Required preliminary filings include: (1) Venue Administrator NOC, (2) Zonal Health Officer Sanitation Escrow Clearance, (3) Divisional Police Station Intimation for crowd flow over 100 persons, and (4) Fire Service Access Corridor Inspection.",
+      "keywords": ["lead time", "clearance", "police", "fire", "sanitation", "zonal", "noc", "21 days"]
+    },
+    {
+      "section_id": "SEC-4.4",
+      "heading": "Coastal Ecology & Zero-Plastic Green Protocol",
+      "content": "Strict prohibition of single-use plastics, helium balloon releases, and high-intensity strobe lighting projecting toward the coastline during sea turtle nesting windows (December through April).",
+      "keywords": ["plastic", "ecology", "coastline", "lighting", "green protocol"]
+    }
+  ]
+}
+

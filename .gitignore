@@ -1,0 +1,31 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Databases and runtime data
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+backend/data/chroma_db/
+
+# Model caches
+.cache/
+huggingface/
+models/
+
+# Logs and temporary files
+*.log
+.DS_Store
