@@ -235,36 +235,41 @@ def run_all_agent_tests():
     print("\n[Test 10] FastAPI POST /api/ai/command integration & session continuity...")
     client = TestClient(app)
 
-    # 10a: First command in session
+    # 10a: First command in session (explicit deterministic mock execution)
     payload_1 = {
         "user_id": "usr-aarav",
         "message": "Find a stage in Kolkata for an acoustic recital",
+        "force_mock": True,
     }
     res_api_1 = client.post("/api/ai/command", json=payload_1)
     assert res_api_1.status_code == 200, f"AI command failed: {res_api_1.text}"
     data_1 = res_api_1.json()
     assert data_1["execution_status"] == "completed"
+    assert data_1["execution_mode"] == "offline_deterministic"
     assert "stage_match" in data_1["selected_specialist_agents"]
     assert len(data_1["agent_execution_events"]) >= 4
     session_id = data_1["session_id"]
     assert session_id is not None
-    print(f"✓ Test 10a: Initial command successful (session_id: {session_id}).")
+    print(f"✓ Test 10a: Initial command successful (session_id: {session_id}, mode: {data_1['execution_mode']}).")
 
     # 10b: Follow-up command maintaining the same session_id
     payload_2 = {
         "user_id": "usr-aarav",
         "message": "What permissions and noise curfews apply to this venue?",
         "session_id": session_id,
+        "force_mock": True,
     }
     res_api_2 = client.post("/api/ai/command", json=payload_2)
     assert res_api_2.status_code == 200
     data_2 = res_api_2.json()
     assert data_2["session_id"] == session_id, f"Session ID mismatch: expected {session_id}, got {data_2['session_id']}"
+    assert data_2["execution_status"] == "completed"
+    assert data_2["execution_mode"] == "offline_deterministic"
     assert "civic_assist" in data_2["selected_specialist_agents"]
-    print(f"✓ Test 10b: Follow-up command preserved session continuity ({session_id}).")
+    print(f"✓ Test 10b: Follow-up command preserved session continuity ({session_id}, mode: {data_2['execution_mode']}).")
 
     # 10c: Validation on empty message
-    res_empty = client.post("/api/ai/command", json={"user_id": "usr-aarav", "message": "   "})
+    res_empty = client.post("/api/ai/command", json={"user_id": "usr-aarav", "message": "   ", "force_mock": True})
     assert res_empty.status_code == 400
     print("✓ Test 10c: Input validation properly rejected empty message with 400.")
 

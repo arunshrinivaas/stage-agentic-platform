@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { VenueImage } from "@/components/ui/VenueImage";
 import {
   BuildingIcon,
   MapPinIcon,
@@ -33,7 +34,7 @@ export function FindYourStage({ venues, onRequestVenue }: FindYourStageProps) {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Badge variant="default">Spaces with Character</Badge>
-              <Badge variant="demo">Demo Venues</Badge>
+              <Badge variant="outline">Verified Venues</Badge>
             </div>
             <h2 className="font-editorial text-3xl sm:text-4xl font-medium text-[#191817]">
               Find Your Stage
@@ -91,9 +92,12 @@ export function FindYourStage({ venues, onRequestVenue }: FindYourStageProps) {
               <div>
                 {/* Visual Imagery */}
                 <div className="relative aspect-[16/9] overflow-hidden bg-[#191817]">
-                  <Image
+                  <VenueImage
                     src={venue.imageUrl}
                     alt={venue.name}
+                    venueId={venue.id}
+                    venueName={venue.name}
+                    venueType={venue.venueType}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                     sizes="(max-width: 768px) 100vw, 50vw"
@@ -105,8 +109,8 @@ export function FindYourStage({ venues, onRequestVenue }: FindYourStageProps) {
                     <Badge variant="dark" size="sm">
                       {venue.venueType}
                     </Badge>
-                    <Badge variant="demo" size="sm">
-                      Demo Stage
+                    <Badge variant="status" size="sm">
+                      Active Stage
                     </Badge>
                   </div>
 

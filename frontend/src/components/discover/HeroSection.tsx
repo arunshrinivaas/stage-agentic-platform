@@ -137,7 +137,7 @@ export function HeroSection({
                       Tonight’s Spotlight
                     </span>
                   </div>
-                  <Badge variant="demo" size="sm">
+                  <Badge variant="status" size="sm">
                     Live
                   </Badge>
                 </div>

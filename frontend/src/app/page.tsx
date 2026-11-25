@@ -12,13 +12,13 @@ import {
   ReservationModal,
   ModalPayload,
 } from "@/components/ui/ReservationModal";
-import { RoleAuthModal } from "@/components/ui/RoleAuthModal";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import { MOCK_PERFORMANCES, MOCK_VENUES, MOCK_CAUSES } from "@/data/mockData";
 import { PerformanceEvent, StageVenue, SocialCause } from "@/types";
 
 export default function DiscoverPage() {
   const [modalPayload, setModalPayload] = useState<ModalPayload>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -42,7 +42,7 @@ export default function DiscoverPage() {
   return (
     <div id="discover" className="min-h-screen flex flex-col bg-[#FAFAF7] text-[#191817]">
       {/* Navigation */}
-      <Navbar onOpenDemoAuth={() => setIsAuthModalOpen(true)} />
+      <Navbar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       {/* Main Content Sections */}
       <main className="flex-1">
@@ -84,10 +84,10 @@ export default function DiscoverPage() {
         onClose={() => setModalPayload(null)}
       />
 
-      {/* Role Selection & Get Started Modal */}
-      <RoleAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+      {/* Central Settings Centre Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
   );

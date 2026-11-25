@@ -24,11 +24,11 @@ export function Footer() {
             </p>
 
             <div className="pt-2 flex items-center gap-2">
-              <Badge variant="demo" className="bg-[#2D2A26] text-[#E68A68] border-[#3E3A34]">
-                Milestone 1 Demo
+              <Badge variant="status" className="bg-[#2D2A26] text-[#E68A68] border-[#3E3A34]">
+                National Cultural Network
               </Badge>
               <span className="text-xs text-[#A8A398]">
-                Agentic Cultural POC · 2026
+                Live Arts Infrastructure · 2026
               </span>
             </div>
           </div>

@@ -20,7 +20,7 @@ export function CausesSection({ causes, onSelectCause }: CausesSectionProps) {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Badge variant="terracotta">Purpose-Driven Art</Badge>
-              <Badge variant="demo">Demo Causes</Badge>
+              <Badge variant="outline">Active Causes</Badge>
             </div>
             <h2 className="font-editorial text-3xl sm:text-4xl font-medium text-[#191817]">
               Causes That Matter
@@ -65,8 +65,8 @@ export function CausesSection({ causes, onSelectCause }: CausesSectionProps) {
                       <Badge variant="dark" size="sm">
                         {cause.focusArea}
                       </Badge>
-                      <Badge variant="demo" size="sm">
-                        Demo
+                      <Badge variant="status" size="sm">
+                        Verified
                       </Badge>
                     </div>
 

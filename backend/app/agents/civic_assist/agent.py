@@ -1,5 +1,8 @@
 """CivicAssist specialist agent definition using Google ADK."""
+from typing import Optional, Union
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.genai import types
 from app.config import settings
 from .tools import (
     classify_venue,
@@ -26,9 +29,14 @@ Strict Execution Boundaries:
 - Do NOT generate fabricated citations; only cite identifiable corpus documents (DOC-CIVIC-001 through DOC-CIVIC-004).
 """
 
-def create_civic_assist_agent(model: str | None = None) -> LlmAgent:
+def create_civic_assist_agent(model: Optional[Union[str, Gemini]] = None) -> LlmAgent:
     """Instantiate the CivicAssist ADK specialist agent."""
-    selected_model = model or settings.ai_model
+    if isinstance(model, Gemini):
+        selected_model = model
+    elif isinstance(model, str):
+        selected_model = Gemini(model=model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
+    else:
+        selected_model = Gemini(model=settings.ai_model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
     return LlmAgent(
         name="civic_assist",
         description="Specialist agent that analyzes venue regulations, retrieves identifiable corpus guidance via RAG, generates permission checklists, and drafts formal permission letters.",

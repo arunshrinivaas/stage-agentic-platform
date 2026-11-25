@@ -76,7 +76,7 @@ export function RoleAuthModal({ isOpen, onClose }: RoleAuthModalProps) {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Badge variant="terracotta">Role-Based Experience</Badge>
-            <Badge variant="demo">Milestone 2</Badge>
+            <Badge variant="outline">Verified Workspaces</Badge>
           </div>
 
           <h3 className="font-editorial text-2xl font-medium text-[#191817] mb-1.5">

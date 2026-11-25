@@ -73,7 +73,7 @@ export function ReservationModal({ payload, onClose }: ReservationModalProps) {
         ) : (
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Badge variant="demo">Demo Simulation</Badge>
+              <Badge variant="outline">Sandbox Reservation</Badge>
               {payload.type === "event" && <Badge variant="terracotta">Reserve Seat</Badge>}
               {payload.type === "venue" && <Badge variant="default">Stage Rider Request</Badge>}
               {payload.type === "cause" && <Badge variant="terracotta">Impact Contribution</Badge>}

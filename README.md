@@ -1,45 +1,106 @@
-# STAGE — Autonomous Agentic AI Platform
+# STAGE — Autonomous Agentic Cultural Platform
 
-STAGE is an agentic AI platform that connects performance artists, venue hosts, civic authorities, and community causes. Powered by the Google Agent Development Kit (ADK) and Gemini models, STAGE orchestrates specialized autonomous agents to streamline venue discovery, automate municipal sound and curfew compliance via semantic RAG, and channel live performance proceeds toward verified community initiatives.
+**Where talent meets purpose.**
+
+STAGE is an agentic AI platform that unites performance artists, stage providers, audiences, and grassroots civic causes into a transparent, purpose-driven live cultural ecosystem. Powered by the **Google Agent Development Kit (ADK)**, **Gemini models**, **Model Context Protocol (MCP)**, **Redis caching**, **ChromaDB vector RAG**, and **Apache Kafka event streaming**, STAGE coordinates hyper-local venue matching, municipal acoustic compliance checking, and ticket-backed civic impact contributions.
 
 ---
 
 ## Table of Contents
 
-- [Platform Overview](#platform-overview)
-- [Key Features](#key-features)
-- [System Architecture](#system-architecture)
-- [Multi-Agent System](#multi-agent-system)
-- [Semantic RAG Engine](#semantic-rag-engine)
-- [Technology Stack](#technology-stack)
-- [Database Schema & REST API](#database-schema--rest-api)
-- [AI Command Centre & Execution Safety](#ai-command-centre--execution-safety)
-- [Installation & Local Setup](#installation--local-setup)
-- [Verification & Test Suites](#verification--test-suites)
-- [Milestone Checkpoint & Safety Implementation](#milestone-checkpoint--safety-implementation)
-- [Roadmap & Limitations](#roadmap--limitations)
-- [License](#license)
+1. [Platform Overview & Roles](#platform-overview--roles)
+2. [Technology Stack](#technology-stack)
+3. [System Architecture](#system-architecture)
+4. [Autonomous Multi-Agent System (Google ADK)](#autonomous-multi-agent-system-google-adk)
+5. [Core Subsystems](#core-subsystems)
+   - [Model Context Protocol (MCP) Venue Server](#1-model-context-protocol-mcp-venue-server)
+   - [Semantic RAG Engine (ChromaDB)](#2-semantic-rag-engine-chromadb)
+   - [High-Performance Venue Cache (Redis)](#3-high-performance-venue-cache-redis)
+   - [Transactional Event Outbox & Kafka Bus](#4-transactional-event-outbox--kafka-bus)
+6. [Authentication & Role-Based Workspaces](#authentication--role-based-workspaces)
+7. [Demo Personas & Access Instructions](#demo-personas--access-instructions)
+8. [Local Installation & Startup Commands](#local-installation--startup-commands)
+9. [Verification & Test Suites](#verification--test-suites)
+10. [Security Boundaries & Limitations](#security-boundaries--limitations)
+11. [Simulated Payment & Contribution Disclaimer](#simulated-payment--contribution-disclaimer)
+12. [License](#license)
 
 ---
 
-## Platform Overview
+## Platform Overview & Roles
 
-STAGE coordinates four primary stakeholders across live urban cultural ecosystems:
+STAGE coordinates four primary cultural stakeholders through dedicated authenticated workspaces:
 
-1. **Performers**: Indie musicians, theatre ensembles, and acoustic artists seeking suitable performance spaces, transparent scheduling, and automated compliance checking.
-2. **Venue Hosts**: Independent cafes, open-air amphitheatres, cultural halls, and studio spaces looking to maximize utilization while respecting zoning and decibel regulations.
-3. **Audiences**: Urban event-goers seeking hyper-local performances with transparent cause-based ticket contributions.
-4. **Social Causes**: Verified non-profits and civic initiatives that receive crowd-funded micro-pledges generated during live performances.
+```
+                  ┌──────────────────────────────────────────────┐
+                  │                 STAGE Web App                │
+                  │             (Next.js 16 + React 19)          │
+                  └──────┬──────────────┬──────────────┬─────────┘
+                         │              │              │
+        ┌────────────────▼──┐    ┌──────▼──────┐   ┌───▼────────────────┐
+        │  Performer Space  │    │  Host Space │   │   Audience Portal  │
+        │   (Aarav Mehta)   │    │  (Priya S.) │   │     (Rhea Sen)     │
+        └───────────────────┘    └─────────────┘   └────────────────────┘
+                         │              │              │
+                         └──────┬───────┴──────────────┘
+                                │
+                  ┌─────────────▼────────────────┐
+                  │    Organiser & Cause Hub     │
+                  │   (Delta Melody Foundation)  │
+                  └──────────────────────────────┘
+```
+
+1. **Performer (`/dashboard/performer`)**:
+   - Discover suitable acoustic stages filtered by capacity, neighborhood, and sound policy.
+   - Submit formal performance pitches with technical riders, duration, and target dates.
+   - Edit pitch details with automatic review status reversion when material terms change.
+   - Withdraw or resubmit pitches with complete audit history tracking.
+
+2. **Stage Provider (`/dashboard/provider`)**:
+   - Register and curate unique performance spaces (heritage lofts, open-air amphitheatres).
+   - Review incoming pitches from artists with complete technical specifications.
+   - Approve, return for revisions (with host review notes), or decline pitches.
+
+3. **Audience (`/dashboard/audience`)**:
+   - Discover curated live performances across city cultural districts.
+   - Book tickets with instant seat allocation and verifiable digital passes (`STG-PASS-*`).
+   - Track micro-pledges redirected from ticket proceeds toward community causes.
+
+4. **Organiser (`/dashboard/organiser`)**:
+   - Launch and steward verified social impact campaigns.
+   - Monitor transparent contribution ledgers funded automatically by linked performances.
+   - Track impact metrics (instruments distributed, children tutored, community spaces preserved).
+
+5. **Platform Administrator (`/dashboard/command`)**:
+   - Inspect glass-box AI Command Centre execution, agent handoffs, tool parameters, and streaming reasoning.
+   - Exercise cross-role platform oversight and multi-persona simulation.
+
+6. **Demo Sandbox (`/dashboard/demo`)**:
+   - Quick-switch hub allowing live presenters to toggle between all 5 personas in a single click without signing out.
 
 ---
 
-## Key Features
+## Technology Stack
 
-- **Multi-Agent Orchestration**: Native Google ADK workflow featuring a top-level orchestrator that coordinates domain-specific specialist agents.
-- **Semantic RAG with ChromaDB**: Local vector retrieval over civic and municipal acoustic guidelines using `sentence-transformers/all-MiniLM-L6-v2` with dense cosine similarity and metadata filtering.
-- **Resilient AI Execution & Safety**: 3-tier execution model (Live Gemini, Deterministic Offline, and Partial Failure Safe Exit) with mutating tool tracking to prevent duplicate database writes on network failures.
-- **Observable AI Command Centre**: Real-time visualization of agent transitions, tool invocations, function arguments, and streaming responses.
-- **Dual Execution Engine**: Full platform functionality operates offline deterministically when an API key is not present, ensuring zero vendor lock-in and uninterrupted development.
+| Layer | Technology | Version | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Frontend Framework** | Next.js (App Router) | `16.4.6` | Server & client React rendering, route handling |
+| **UI Library** | React | `19.3.0` | Declarative component architecture |
+| **Styling** | Tailwind CSS | `4.3.3` | Custom luxury editorial styling & design system |
+| **Icons** | Lucide React | `1.16.0` | Accessible vector iconography |
+| **Backend Framework** | FastAPI | `0.165.0` | Asynchronous high-performance REST API |
+| **ASGI Server** | Uvicorn | `0.54.0` | Asynchronous production web server |
+| **Agent Framework** | Google ADK | `2.15.0` | Hierarchical multi-agent orchestration |
+| **LLM Inference** | Google GenAI | `2.34.0` | Gemini 2.5 Flash / Pro reasoning engine |
+| **Tool Protocol** | Model Context Protocol | `1.2.0` | Stdio MCP client/server integration |
+| **Vector Database** | ChromaDB | `1.5.9` | Local persistent dense vector storage |
+| **Embedding Engine** | SentenceTransformers | `6.3.0` | CPU vector embeddings (`all-MiniLM-L6-v2`) |
+| **Cache Store** | Redis | `8.12.0` | Low-latency query caching with durable generations |
+| **Event Bus** | Apache Kafka (KRaft) | `4.4.0` | Distributed transactional event streaming |
+| **Kafka Client** | confluent-kafka | `2.8.2` | High-throughput C/Python Kafka driver |
+| **Primary Database** | SQLite (`sqlite3`) | Standard | Authoritative transactional relational storage |
+| **Password Hashing** | bcrypt | `5.0.0` | Cryptographic password hashing (work factor 12) |
+| **Schema Validation** | Pydantic v2 | `2.14.4` | Strict request/response validation |
 
 ---
 
@@ -47,247 +108,229 @@ STAGE coordinates four primary stakeholders across live urban cultural ecosystem
 
 ```mermaid
 graph TD
-    User([User / Browser]) <--> UI[Next.js 16 Web Application]
-    UI <-->|Async HTTP / REST| API[FastAPI Backend Engine]
-    
-    API <-->|aiosqlite| DB[(SQLite Storage Engine)]
-    API <-->|ADK Runner| Orch[STAGE Orchestrator Agent]
-    
-    subgraph Multi-Agent Workspace
-        Orch -->|Delegates| SM[StageMatch Specialist]
-        Orch -->|Delegates| CA[CivicAssist Specialist]
-        Orch -->|Delegates| IF[ImpactFlow Specialist]
+    User([Browser Client]) <-->|HTTPS / REST| Next[Next.js 16 Web Application]
+    Next <-->|JSON API + Bearer Auth| Fast[FastAPI Backend Engine]
+
+    subgraph Relational & Event Layer
+        Fast <-->|SQLite Transaction| DB[(SQLite: stage.db)]
+        DB -->|Atomic Write| Outbox[event_outbox Table]
+        Outbox -->|Background Relay| Pub[Outbox Publisher]
+        Pub -->|Produce| Kafka[(Kafka: stage.events)]
+        Kafka -->|Group: stage-notifications| ConsNotif[Notification Consumer]
+        Kafka -->|Group: stage-analytics| ConsAnal[Analytics Consumer]
+        ConsNotif -->|Idempotent Write| DB
+        ConsAnal -->|Idempotent Write| DB
     end
-    
-    subgraph Local Semantic RAG
-        CA <-->|Dense Search| Chroma[(Persistent ChromaDB)]
-        Chroma <--> Embed[all-MiniLM-L6-v2 Embeddings]
+
+    subgraph Discovery & Cache Layer
+        Fast <-->|Generation Verified| Redis[(Redis 8: Venue Cache)]
+        Fast <-->|Stdio MCP Protocol| MCP[Local MCP Venue Server]
+        MCP <--> DB
+    end
+
+    subgraph Agentic Intelligence
+        Fast <-->|ADK Runner| Orch[STAGE Orchestrator]
+        Orch -->|Handoff| SM[StageMatch Specialist]
+        Orch -->|Handoff| CA[CivicAssist Specialist]
+        Orch -->|Handoff| IF[ImpactFlow Specialist]
+        CA <-->|Dense Cosine Search| Chroma[(ChromaDB: Civic RAG)]
+        SM <-->|Call Tool| MCP
     end
 ```
 
 ---
 
-## Multi-Agent System
+## Autonomous Multi-Agent System (Google ADK)
 
-STAGE implements a hierarchical multi-agent architecture built on the Google Agent Development Kit (`google-adk`):
+STAGE implements a hierarchical multi-agent architecture built on the **Google Agent Development Kit (`google-adk`)**:
 
 ### 1. STAGE Orchestrator (`stage_orchestrator`)
-- Acts as the primary user-facing conversational coordinator.
-- Inspects incoming requests, determines agent routing requirements, and delegates tasks to domain specialists using native ADK sub-agent handoffs.
-- Synthesizes findings from multiple specialists into coherent, structured responses.
+- Acts as the primary conversational coordinator and user-facing intelligence.
+- Evaluates user intent, dynamically transfers execution to specialists, and synthesizes answers across domains.
 
 ### 2. StageMatch Specialist (`stage_match_agent`)
-- Dedicated to venue discovery, acoustic fitment evaluation, and booking generation.
-- **Tools**:
-  - `search_stages(city, max_capacity, stage_type)`: Queries the SQLite database for candidate venues filtered by capacity and acoustic suitability.
-  - `compute_match_score(venue_id, requirements)`: Scores venue compatibility based on technical equipment, capacity ratios, and acoustic constraints.
-  - `create_booking(venue_id, artist_id, requested_date, agreed_rate)`: Creates confirmed venue booking records in the database.
+- Evaluates acoustic fitment, seating capacities, and equipment requirements.
+- Uses **Model Context Protocol (MCP)** tools (`search_stages`, `compute_match_score`) to query venues deterministically.
 
 ### 3. CivicAssist Specialist (`civic_assist_agent`)
-- Dedicated to regulatory analysis, municipal curfew checking, noise level compliance, and permit guidance.
-- **Tools**:
-  - `check_curfew_rules(city, zone, sound_type)`: Quick rule-based verification of municipal curfew and baseline sound limits.
-  - `retrieve_civic_guidance(query, city, category)`: Semantic retrieval interface querying the local ChromaDB vector database.
-  - `query_civic_knowledge(query, city, zone, category)`: Detailed hybrid semantic query tool returning section-level citations, noise thresholds, and compliance recommendations.
+- Specializes in municipal sound laws, outdoor decibel limits, curfew times, and permit guidelines.
+- Leverages **ChromaDB Semantic RAG** to retrieve and cite municipal acoustic guidelines across Indian cities.
 
 ### 4. ImpactFlow Specialist (`impact_flow_agent`)
-- Dedicated to non-profit discovery, social cause alignment, and ticket pledge calculations.
-- **Tools**:
-  - `recommend_causes(category, city)`: Retrieves verified social causes matching performance genres and locations.
-  - `simulate_crowdfund_impact(ticket_price, target_attendance, pledge_percentage)`: Calculates projected micro-contributions and social impact metrics.
-  - `record_ticket_pledge(event_id, cause_id, pledge_amount)`: Records an immutable cause pledge for a scheduled performance.
+- Aligns performance genres with verified grassroots community non-profits.
+- Simulates ticket-pledge allocations and audits transparent contribution ledgers.
 
 ---
 
-## Semantic RAG Engine
+## Core Subsystems
 
-CivicAssist employs a fully local semantic retrieval pipeline powered by ChromaDB and SentenceTransformers:
+### 1. Model Context Protocol (MCP) Venue Server
+- Runs as an isolated stdio child process (`backend/app/mcp_server/venue_server.py`).
+- Exposes two strongly typed tools: `search_stages` and `compute_match_score`.
+- StageMatch accesses these tools via Google ADK's `McpToolset`, ensuring clean protocol separation between agent reasoning and database access.
 
-- **Vector Database**: ChromaDB (`chromadb==1.5.9`) operating via `PersistentClient` targeting `backend/data/chroma_db`.
-- **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2` generating 384-dimensional normalized vector embeddings running purely on local CPU.
-- **Chunking Strategy**: Section-aware semantic chunking preserving document hierarchy, municipal authority metadata, applicable city zones, curfew hours, and maximum decibel allowances.
-- **Similarity Metric**: Cosine similarity normalized to $[0.0, 1.0]$. A relevance threshold of $0.35$ filters low-confidence context chunks.
-- **Metadata Filtering**: Exact-match pre-filtering on municipal fields (`city`, `zone`, `category`).
-- **Citation Attribution**: Every retrieved answer includes explicit document identifiers (`doc_id`), section references, and confidence scores.
-- **Corpus**:
-  - `DOC-CIVIC-001`: Chennai Coastal & Heritage Zone Acoustic Guidelines
-  - `DOC-CIVIC-002`: Kolkata Riverfront Heritage Precinct Regulations
-  - `DOC-CIVIC-003`: Public Parks Open-Air Sound Management
-  - `DOC-CIVIC-004`: Private Acoustic Performance Venues Standard Operating Procedures
+### 2. Semantic RAG Engine (ChromaDB)
+- Persistent vector collection stored in `backend/data/chroma_db`.
+- Local `sentence-transformers/all-MiniLM-L6-v2` dense embedding model running purely on CPU.
+- Indexes municipal guidelines (`DOC-CIVIC-001` through `DOC-CIVIC-004`) covering coastal, riverfront, and heritage zones in Kolkata, Mumbai, and Chennai.
+- Retrieval combines dense cosine similarity (threshold $\ge 0.35$) with exact metadata pre-filtering on `city`, `zone`, and `category`.
 
-> **Civic Disclaimer**: All civic guidelines, municipal curfews, and regulatory data provided in the platform are demonstration records curated for prototype evaluation. They do not constitute statutory legal advice or official government directives.
+### 3. High-Performance Venue Cache (Redis)
+- Distributed caching layer targeting `redis://127.0.0.1:6379/0`.
+- **Durable Generations**: Cache keys incorporate a durable generation counter stored in SQLite (`stage:venues:g{generation}:v{version}:{hash}`).
+- **Stale Write Elimination**: When a venue is created, the durable counter increments inside the database transaction. Concurrent in-flight reads with older generations fail closed and cannot poison the cache.
+- **Fail-Closed Fallback**: In the event of a Redis network failure, searches fall back seamlessly to SQLite without user disruption.
 
----
-
-## Technology Stack
-
-| Component | Technology | Version | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Frontend Framework** | Next.js | `16.4.6` | App router, server and client components |
-| **UI Library** | React | `19.3.0` | Declarative user interfaces |
-| **Styling** | Tailwind CSS | `4.3.3` | Utility-first responsive styling |
-| **Backend Framework** | FastAPI | `0.165.0` | High-performance asynchronous API server |
-| **ASGI Server** | Uvicorn | `0.54.0` | Asynchronous server implementation |
-| **Agent Framework** | Google ADK | `2.15.0` | Autonomous multi-agent coordination |
-| **Model SDK** | Google GenAI | `2.34.0` | Gemini 2.5 Flash / Pro model connectivity |
-| **Vector Database** | ChromaDB | `1.5.9` | Local persistent vector storage |
-| **Embedding Engine** | SentenceTransformers | `6.3.0` | Local dense embedding inference |
-| **Deep Learning Runtime** | PyTorch | `2.15.0` | CPU tensor compute for embeddings |
-| **Database** | SQLite + aiosqlite | `0.22.1` | Asynchronous relational data persistence |
-| **Data Validation** | Pydantic | `2.14.4` | Request and response schema enforcement |
+### 4. Transactional Event Outbox & Kafka Bus
+- Guarantees **at-least-once delivery** and eliminates distributed dual-write inconsistencies.
+- Business mutations (venue creation, request updates, bookings, campaigns) write an event row to `event_outbox` in the same database transaction.
+- A background publisher thread polls pending events, produces them to the Kafka topic `stage.events` (3 partitions, replication factor 1), and marks them `published_at`.
+- Two independent consumer groups process events:
+  - `stage-notifications`: Generates in-app notifications.
+  - `stage-analytics`: Records operational metrics in `event_analytics`.
+- Consumers track processed IDs in `processed_events` for strict **idempotent deduplication**.
 
 ---
 
-## Database Schema & REST API
+## Authentication & Role-Based Workspaces
 
-The SQLite persistence layer contains 8 normalized relational tables:
+STAGE features a dedicated, secure role-based authentication system:
 
-1. `users`: Artist, host, and organizer accounts.
-2. `stage_venues`: Venue profiles, location coordinates, sound limits, and capacity ratings.
-3. `performance_requests`: Incoming booking requests submitted by performers.
-4. `stage_events`: Scheduled performances, time slots, and ticketing status.
-5. `bookings`: Confirmed venue reservations and contractual arrangements.
-6. `causes`: Registered civic initiatives and non-profit partner profiles.
-7. `contributions`: Ticket pledge allocations and community funding records.
-8. `notifications`: In-app event alerts, compliance warnings, and booking confirmations.
-
-### Primary API Endpoints
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/ai/command` | Main entry point for the Multi-Agent Orchestrator |
-| `GET` | `/api/venues` | List and search venues with acoustic filtering |
-| `POST` | `/api/venues` | Register a new performance venue |
-| `GET` | `/api/requests` | List artist performance and booking requests |
-| `POST` | `/api/requests` | Submit a new performance inquiry |
-| `GET` | `/api/events` | Retrieve scheduled performances and line-ups |
-| `POST` | `/api/events` | Schedule and publish a new performance event |
-| `GET` | `/api/bookings` | List active and historical venue bookings |
-| `POST` | `/api/bookings` | Confirm venue reservation |
-| `GET` | `/api/causes` | List verified community and social causes |
-| `POST` | `/api/contributions` | Record a ticket pledge contribution |
-| `GET` | `/api/notifications` | Fetch user alerts and compliance notices |
-| `GET` | `/health` | Backend service health and status probe |
+- **Password Cryptography**: Passwords are saved as **bcrypt** hashes (`rounds=12`) with unique 128-bit per-user salts. Plaintext passwords are never stored or logged.
+- **Constant-Time Verification**: Verification uses constant-time string comparisons (`bcrypt.checkpw` and `secrets.compare_digest`) to prevent side-channel timing attacks.
+- **Session Tokens**: Server-side session tokens (`stg_tok_*`) with 256 bits of cryptographic entropy stored in `user_sessions` with 14-day expiration.
+- **Strict Authorization**: Requests without credentials to mutating endpoints receive `HTTP 401 Unauthorized`. Authenticated users attempting cross-role operations receive `HTTP 403 Forbidden`.
+- **Impersonation Prevention**: Performer pitch submissions are bound server-side to the authenticated user's verified performer profile.
+- **Ownership & Material Alterations**: Only pitch owners can edit or withdraw requests. Material term changes (date, venue, budget, title) on approved pitches automatically revert status to `pending` with audit trails.
 
 ---
 
-## AI Command Centre & Execution Safety
+## Demo Personas & Access Instructions
 
-The frontend includes an interactive **AI Command Centre** (`/dashboard/command`) that provides glass-box observability into the multi-agent system:
+To facilitate live demonstrations, STAGE includes 5 pre-configured personas. All accounts share the standard demonstration password:
 
-- **Execution Modes**:
-  - `live_gemini`: Live execution with Gemini via Google ADK.
-  - `offline_deterministic`: High-speed rule-based execution for local development without API credentials.
-  - `live_gemini_partial_failure`: Graceful error recovery when a transient fault occurs after side-effect operations have completed.
-- **Mutating Side-Effect Protection**: Mutating tools (`create_booking`, `record_ticket_pledge`) are tracked during execution. If a failure occurs after a mutating action has executed, the system suppresses fallback retries to prevent duplicate database writes.
-- **Isolated Attempt Sessions**: Multi-agent retries operate inside isolated child sessions, ensuring failed attempt artifacts do not pollute the primary conversation history.
-- **Transient Retries**: Up to 3 attempts with exponential backoff and jitter for transient 5xx HTTP errors, while routing non-retryable 4xx authentication errors cleanly.
+`stage2026`
+
+| Persona | Email | Assigned Role | Workspace Route | Focus & Demonstration Context |
+| :--- | :--- | :--- | :--- | :--- |
+| **Aarav Mehta** | `aarav@stage.live` | `performer` | `/dashboard/performer` | Classical sitarist pairing ragas with baroque French cello; discovers stages and manages performance pitches. |
+| **Priya Sanghavi** | `priya@heritagestages.live` | `provider` | `/dashboard/provider` | Curator of heritage brick lofts; registers venues, reviews artist riders, approves/returns pitches. |
+| **Rhea Sen** | `rhea.sen@example.com` | `audience` | `/dashboard/audience` | Independent art patron; discovers live gigs, books passes, tracks cause contributions. |
+| **Delta Melody Foundation** | `organizer@deltamelody.org` | `organiser` | `/dashboard/organiser` | Cultural non-profit; launches campaigns, audits transparent impact proceeds. |
+| **STAGE Admin** | `admin@stage.live` | `admin` | `/dashboard/command` | Multi-role platform steward; inspects AI Command Centre reasoning and cross-role events. |
+
+### How to Sign In
+1. Navigate to `http://localhost:3000/login`.
+2. **1-Click Demo**: Click any persona pill (e.g. *Aarav Mehta*) in the quick-switch bar.
+3. **Standard Login**: Enter email (e.g. `aarav@stage.live`) and password `stage2026`.
+4. **Sandbox Switcher**: Use `/dashboard/demo` to jump between roles instantly.
 
 ---
 
-## Installation & Local Setup
+## Local Installation & Startup Commands
 
 ### Prerequisites
-
-- macOS or Linux operating system
-- Python 3.12+
+- macOS or Linux
+- Python 3.12+ (in `backend/.venv`)
 - Node.js 20+ and npm 10+
-- (Optional) Google Gemini API Key
+- Apache Kafka 4.4+ (KRaft mode on `127.0.0.1:9092`)
+- Redis 8.12+ (on `127.0.0.1:6379`)
 
-### 1. Clone the Repository
+### 1. Verify Background Infrastructure
+Ensure Kafka and Redis services are active:
 
 ```bash
-git clone https://github.com/arunshrinivaas/stage-agentic-platform.git
-cd stage-agentic-platform
+# Verify Redis
+redis-cli ping
+# Output: PONG
+
+# Verify Kafka broker
+nc -z 127.0.0.1 9092 && echo "Kafka listening on 9092"
 ```
 
-### 2. Backend Setup
-
+### 2. Backend Startup
 ```bash
 cd backend
-
-# Create and activate Python virtual environment
-python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env to add your GEMINI_API_KEY (optional; system runs offline without it)
-
-# Launch backend server
+# Launch FastAPI with auto-reload
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+- API root: `http://127.0.0.1:8000`
+- OpenAPI docs: `http://127.0.0.1:8000/docs`
+- Health probe: `http://127.0.0.1:8000/health`
 
-The backend API will be available at `http://127.0.0.1:8000` with interactive OpenAPI documentation at `http://127.0.0.1:8000/docs`.
-
-### 3. Frontend Setup
-
-In a separate terminal window:
-
+### 3. Frontend Startup
+In a separate terminal:
 ```bash
 cd frontend
-
-# Install npm dependencies
-npm install
-
-# Configure environment
-cp .env.example .env.local
 
 # Launch Next.js development server
 npm run dev
 ```
-
-The frontend dashboard will be available at `http://localhost:3000`.
+- Web application: `http://localhost:3000`
+- Login portal: `http://localhost:3000/login`
 
 ---
 
 ## Verification & Test Suites
 
-The backend includes 5 automated test suites covering API contracts, multi-agent coordination, semantic vector retrieval, and live execution resilience:
+The STAGE test suite covers every layer of the platform. Execute them directly from `backend/`:
 
 ```bash
 cd backend
 source .venv/bin/activate
 
-# 1. API Endpoints and Database Operations
-pytest test_api.py -v
+# 1. Security & Authentication Audit (7 suites)
+python test_security_audit.py
 
-# 2. ADK Multi-Agent Orchestration & Tool Calls
-pytest test_adk_agents.py -v
+# 2. Role Auth & Request Lifecycles (6 suites)
+python test_auth_and_requests.py
 
-# 3. CivicAssist RAG Retrieval & Source Attribution
-pytest test_milestone5_rag.py -v
+# 3. REST API Surface & Booking Persistence (14 checks)
+python test_api.py
 
-# 4. ChromaDB Semantic Search & Vector Embeddings
-pytest test_milestone5_semantic_rag.py -v
+# 4. Redis Cache Correctness & Durable Generations (17 tests)
+python test_redis_cache.py
 
-# 5. Gemini Resilience, Retry Policies & Partial Failure Safety
-pytest test_resilient_gemini.py -v
+# 5. Local Stdio MCP Integration (6 tests)
+python test_mcp_integration.py
+
+# 6. Apache Kafka Outbox & Consumer Idempotency (14 tests)
+python test_kafka_integration.py
+
+# 7. Complete End-to-End Integration (5 phases)
+python test_final_e2e.py
 ```
 
-All 53 unit, integration, and architecture tests pass deterministically.
+### Frontend Validation
+```bash
+cd frontend
+
+# TypeScript type check
+npx tsc --noEmit
+
+# Production build
+npm run build
+```
+
+*All automated test suites and production builds pass with exit code `0`.*
 
 ---
 
-## Milestone Checkpoint & Safety Implementation
+## Security Boundaries & Limitations
 
-This repository reflects the completed **Milestone 6.1.2** implementation:
-
-- Full migration from lexical search to persistent ChromaDB semantic vector search.
-- Separation of agent routing observations from state-modifying tool invocations.
-- Protection against duplicate side-effect execution during model failover.
-- Verified live Gemini 2.5 Flash execution alongside deterministic offline parity.
+1. **Demonstration Environment**: The default configuration runs with demonstration credentials in a secure sandbox. Production deployments require replacing development secrets (`SECRET_KEY`, `ADMIN_DEV_SECRET`).
+2. **Social & Phone Login**: Google, Apple, and Phone OTP options on `/login` are classified as **UI-only demonstration / Pending credentials**. An interactive dialog discloses this status and offers immediate 1-click persona sign-in.
+3. **Admin Mode Header**: The `X-STAGE-Role: admin` header requires an explicit, verified `X-STAGE-Admin-Secret`. This secret is strictly maintained on the server and is never bundled in frontend JavaScript.
+4. **Session Storage**: Client sessions store an opaque token (`stage_auth_token`) in browser `localStorage`. Passwords and sensitive keys are never persisted in the browser.
 
 ---
 
-## Roadmap & Limitations
+## Simulated Payment & Contribution Disclaimer
 
-- **Zoning Accuracy**: Municipal sound rules are demonstration representations. Integration with real-time municipal APIs is planned for future milestones.
-- **Payment Gateway**: Ticket pledges are simulated in database records. Direct UPI/payment gateway integration is slated for Milestone 7.
-- **Acoustic Simulation**: Match scoring utilizes heuristic rules. Digital twin acoustic ray-tracing will be explored in future releases.
+> [!IMPORTANT]
+> **Simulated Operations**: All financial transactions within STAGE—including audience ticket purchases, QR pass generation (`STG-PASS-*`), and percentage-based proceeds allocated to non-profit causes—are **simulated demonstrations**. No real currency, bank accounts, credit cards, or UPI rails are accessed. Records stored in `bookings` and `contributions` are demonstration ledgers for evaluation purposes.
 
 ---
 

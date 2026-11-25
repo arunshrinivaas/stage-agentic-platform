@@ -1,9 +1,11 @@
 import time
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from app.database import get_db
 from app.schemas.cause import CauseCreate, CauseResponse, CauseOrganizer
 from app.schemas.contribution import ContributionResponse
+from app.services.outbox import record_outbox_event
+from app.services.auth import require_role
 
 router = APIRouter(prefix="/api", tags=["Causes & Contributions"])
 
@@ -36,7 +38,10 @@ def get_causes():
         return [row_to_cause(r) for r in rows]
 
 @router.post("/causes", response_model=CauseResponse, status_code=201)
-def create_cause(payload: CauseCreate):
+def create_cause(
+    payload: CauseCreate,
+    current_user: dict = Depends(require_role(["organiser"])),
+):
     cause_id = f"cause-{int(time.time() * 1000)}"
     
     with get_db() as conn:
@@ -69,6 +74,23 @@ def create_cause(payload: CauseCreate):
             payload.focusArea,
             payload.imageUrl,
         ))
+
+        # Record transactional outbox event for campaign creation
+        record_outbox_event(
+            conn=conn,
+            event_type="campaign.created",
+            aggregate_type="campaign",
+            aggregate_id=cause_id,
+            payload={
+                "id": cause_id,
+                "title": payload.title,
+                "tagline": payload.tagline,
+                "target_amount": payload.targetAmount,
+                "currency": payload.currency or "₹",
+                "organizer_name": org_name,
+                "focus_area": payload.focusArea,
+            },
+        )
 
         cursor.execute("SELECT * FROM causes WHERE id = ?;", (cause_id,))
         row = cursor.fetchone()

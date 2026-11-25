@@ -126,7 +126,7 @@ export function AddVenueModal({ isOpen, onClose, onSuccessToast }: AddVenueModal
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Badge variant="terracotta">List a Venue</Badge>
-              <Badge variant="demo">Demo Simulation</Badge>
+              <Badge variant="status">Active Space</Badge>
             </div>
 
             <h3 className="font-editorial text-2xl font-medium text-[#191817] mb-1">

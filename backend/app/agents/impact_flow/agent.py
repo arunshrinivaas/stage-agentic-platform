@@ -1,5 +1,8 @@
 """ImpactFlow specialist agent definition using Google ADK."""
+from typing import Optional, Union
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.genai import types
 from app.config import settings
 from .tools import (
     get_campaign_details,
@@ -22,9 +25,14 @@ Strict Execution Boundaries:
 - You do NOT process real credit card payments, bank transfers, or escrow withdrawals.
 """
 
-def create_impact_flow_agent(model: str | None = None) -> LlmAgent:
+def create_impact_flow_agent(model: Optional[Union[str, Gemini]] = None) -> LlmAgent:
     """Instantiate the ImpactFlow ADK specialist agent."""
-    selected_model = model or settings.ai_model
+    if isinstance(model, Gemini):
+        selected_model = model
+    elif isinstance(model, str):
+        selected_model = Gemini(model=model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
+    else:
+        selected_model = Gemini(model=settings.ai_model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
     return LlmAgent(
         name="impact_flow",
         description="Specialist agent that manages transparent simulated contributions, campaign metrics, and deterministic impact calculations.",

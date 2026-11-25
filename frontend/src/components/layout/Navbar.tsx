@@ -2,16 +2,32 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StageLogo, MenuIcon, XIcon, ArrowRightIcon } from "@/components/ui/Icons";
-import { Badge } from "@/components/ui/Badge";
+import { useStageStore } from "@/context/StageStoreContext";
+import { GlobalSearchModal } from "@/components/ui/GlobalSearchModal";
 
 interface NavbarProps {
-  onOpenDemoAuth?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function Navbar({ onOpenDemoAuth }: NavbarProps) {
+export function Navbar({ onOpenSettings }: NavbarProps) {
+  const router = useRouter();
+  const { currentUser } = useStageStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -37,6 +53,18 @@ export function Navbar({ onOpenDemoAuth }: NavbarProps) {
         el.scrollIntoView({ behavior: "smooth" });
       }
       setMobileMenuOpen(false);
+    }
+  };
+
+  const handleEnterPlatform = () => {
+    if (currentUser) {
+      if (currentUser.role === "admin") {
+        router.push("/dashboard/command");
+      } else {
+        router.push(`/dashboard/${currentUser.role}`);
+      }
+    } else {
+      router.push("/login");
     }
   };
 
@@ -85,30 +113,27 @@ export function Navbar({ onOpenDemoAuth }: NavbarProps) {
                 {item.label}
               </a>
             ))}
-
-            {/* Direct Dashboard Link */}
-            <Link
-              href="/dashboard"
-              className="px-3.5 py-1.5 text-sm font-medium text-[#C85A32] hover:bg-[#FBF0EB] rounded-full transition-colors flex items-center gap-1.5"
-            >
-              <span>Workspaces</span>
-              <span className="px-1.5 py-0.2 text-[9px] font-semibold bg-[#FBF0EB] text-[#C85A32] rounded-full border border-[#F5DACD]">
-                4 Roles
-              </span>
-            </Link>
           </nav>
 
           {/* Desktop Actions */}
-          <div className="hidden lg:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-2.5">
             <button
-              onClick={onOpenDemoAuth}
+              onClick={() => setIsSearchOpen(true)}
               type="button"
-              className="px-4 py-2 text-sm font-medium text-[#6B665E] hover:text-[#191817] transition-colors"
+              className="px-3.5 py-1.5 text-xs text-[#8E897F] bg-[#F4F2EC] hover:bg-[#ECEAE1] rounded-full border border-[#E8E5DC] flex items-center gap-2 transition-colors"
             >
-              Select Role
+              <span>Search platform...</span>
+              <kbd className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-[#E8E5DC] text-[#6B665E]">⌘K</kbd>
             </button>
             <button
-              onClick={onOpenDemoAuth}
+              onClick={onOpenSettings}
+              type="button"
+              className="px-3 py-1.5 text-xs font-medium text-[#6B665E] hover:text-[#191817] transition-colors flex items-center gap-1.5"
+            >
+              <span>Settings</span>
+            </button>
+            <button
+              onClick={handleEnterPlatform}
               type="button"
               className="inline-flex items-center gap-2 px-4.5 py-2 text-sm font-medium text-white bg-[#191817] hover:bg-[#C85A32] rounded-full transition-all shadow-xs"
             >
@@ -119,12 +144,12 @@ export function Navbar({ onOpenDemoAuth }: NavbarProps) {
 
           {/* Mobile Hamburger Button */}
           <div className="flex items-center gap-2 lg:hidden">
-            <Link
-              href="/dashboard"
-              className="px-3 py-1.5 text-xs font-medium text-[#C85A32] bg-[#FBF0EB] rounded-full border border-[#F5DACD]"
+            <button
+              onClick={handleEnterPlatform}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-[#191817] rounded-full"
             >
-              Workspaces
-            </Link>
+              Enter
+            </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               type="button"
@@ -157,31 +182,35 @@ export function Navbar({ onOpenDemoAuth }: NavbarProps) {
               </a>
             ))}
 
-            <Link
-              href="/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center justify-between px-4 py-2.5 rounded-xl text-base font-medium bg-[#FBF0EB] text-[#C85A32]"
-            >
-              <span>Role Workspaces</span>
-              <Badge variant="terracotta" size="sm">
-                4 Roles
-              </Badge>
-            </Link>
-
             <div className="pt-4 border-t border-[#E8E5DC] flex flex-col gap-2.5">
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onOpenDemoAuth?.();
+                  onOpenSettings?.();
+                }}
+                className="w-full py-2.5 rounded-full text-center text-sm font-medium bg-[#F4F2EC] text-[#191817] border border-[#E8E5DC]"
+              >
+                Settings
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleEnterPlatform();
                 }}
                 className="w-full py-3 rounded-full text-center text-sm font-medium bg-[#191817] text-[#FAFAF7]"
               >
-                Select Role & Enter
+                Enter Platform →
               </button>
             </div>
           </nav>
         </div>
       )}
+
+      {/* Global Search Modal */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
     </header>
   );
 }

@@ -3,7 +3,10 @@ Retrieves SQLite campaign details and contribution ledgers, and performs determi
 All financial calculations are executed by deterministic Python functions.
 """
 from typing import Dict, Any, List, Optional
+from decimal import Decimal, ROUND_HALF_UP
 from app.database import get_db
+
+CENT = Decimal("0.01")
 
 # Data-driven allocation rules retrieved from SQLite records (events, causes, and venues)
 
@@ -230,21 +233,31 @@ def calculate_contribution_allocation(
     if ticket_price < 0 or ticket_count <= 0:
         return {"error": "Invalid ticket pricing or count", "gross_total": 0.0}
 
-    gross_total = round(ticket_price * ticket_count, 2)
+    # Strict decimal arithmetic to guarantee cent-level reconciliation
+    gross_d = (Decimal(str(ticket_price)) * Decimal(str(ticket_count))).quantize(CENT, rounding=ROUND_HALF_UP)
     rule = resolve_allocation_rule(event_id=event_id, cause_id=cause_id, venue_id=venue_id)
 
-    cause_pct = rule["cause_percentage"]
-    venue_pct = rule["venue_percentage"]
-    artist_pct = rule["artist_percentage"]
+    cause_pct = float(rule["cause_percentage"])
+    venue_pct = float(rule["venue_percentage"])
+    artist_pct = float(rule["artist_percentage"])
+    cause_pct_d = Decimal(str(cause_pct))
+    venue_pct_d = Decimal(str(venue_pct))
+    artist_pct_d = Decimal(str(artist_pct))
 
-    cause_pledge = round(gross_total * (cause_pct / 100.0), 2)
-    venue_share = round(gross_total * (venue_pct / 100.0), 2)
-    # Reconcile exact remainder to artist so allocated amounts always equal gross_total exactly
-    artist_share = round(gross_total - (cause_pledge + venue_share), 2)
+    cause_pledge_d = ((gross_d * cause_pct_d) / Decimal("100.00")).quantize(CENT, rounding=ROUND_HALF_UP)
+    venue_share_d = ((gross_d * venue_pct_d) / Decimal("100.00")).quantize(CENT, rounding=ROUND_HALF_UP)
+    # Reconcile exact remainder to artist so allocated amounts always equal gross exactly
+    artist_share_d = gross_d - (cause_pledge_d + venue_share_d)
 
     # Sanity reconciliation verification
-    reconciled_sum = round(artist_share + venue_share + cause_pledge, 2)
-    assert abs(reconciled_sum - gross_total) < 0.001, f"Reconciliation error: {reconciled_sum} != {gross_total}"
+    reconciled_sum_d = artist_share_d + venue_share_d + cause_pledge_d
+    assert reconciled_sum_d == gross_d, f"Decimal reconciliation error: {reconciled_sum_d} != {gross_d}"
+
+    gross_total = float(gross_d)
+    reconciled_sum = float(reconciled_sum_d)
+    artist_share = float(artist_share_d)
+    venue_share = float(venue_share_d)
+    cause_pledge = float(cause_pledge_d)
 
     return {
         "is_simulated": True,

@@ -1,13 +1,42 @@
 import os
 import sys
 import time
+import tempfile
+import uuid
+import atexit
 
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+# 1. Establish isolated temporary SQLite database path BEFORE importing any app modules/settings
+test_db_dir = tempfile.mkdtemp(prefix="stage_test_api_")
+test_db_path = os.path.join(test_db_dir, f"test_api_{uuid.uuid4().hex[:8]}.db")
+os.environ["DATABASE_PATH"] = test_db_path
+
+def cleanup_test_database():
+    """Clean up the isolated temporary database files and directory."""
+    for path in [
+        test_db_path,
+        f"{test_db_path}-wal",
+        f"{test_db_path}-shm",
+    ]:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+    try:
+        if os.path.exists(test_db_dir):
+            os.rmdir(test_db_dir)
+    except OSError:
+        pass
+
+atexit.register(cleanup_test_database)
+
+# 2. Now import app modules and testclient (settings.database_path resolves to test_db_path)
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database import init_db
+from app.database import init_db, get_db
 from app.services.seed_data import seed_database
 
 def test_backend_end_to_end():
@@ -68,7 +97,7 @@ def test_backend_end_to_end():
         },
         "imageUrl": "https://images.unsplash.com/photo-1519750157634-b6d493a0f77c?w=900"
     }
-    res_post_venue = client.post("/api/venues", json=new_venue_payload)
+    res_post_venue = client.post("/api/venues", json=new_venue_payload, headers={"X-STAGE-Role": "provider"})
     assert res_post_venue.status_code == 201, f"Create venue failed: {res_post_venue.text}"
     created_venue = res_post_venue.json()
     assert created_venue["name"] == venue_name
@@ -99,7 +128,7 @@ def test_backend_end_to_end():
         "currency": "₹",
         "description": "Chamber sitar and cello acoustic set."
     }
-    res_post_req = client.post("/api/requests", json=new_req_payload)
+    res_post_req = client.post("/api/requests", json=new_req_payload, headers={"X-STAGE-Role": "performer"})
     assert res_post_req.status_code == 201, f"Create request failed: {res_post_req.text}"
     created_req = res_post_req.json()
     assert created_req["status"] == "pending"
@@ -108,7 +137,8 @@ def test_backend_end_to_end():
     # 7. Approve Request
     res_patch_req = client.patch(
         f"/api/requests/{created_req['id']}/status",
-        json={"status": "approved", "reviewNote": "Venue host cleared acoustic rider."}
+        json={"status": "approved", "reviewNote": "Venue host cleared acoustic rider."},
+        headers={"X-STAGE-Role": "provider"},
     )
     assert res_patch_req.status_code == 200
     assert res_patch_req.json()["status"] == "approved"
@@ -116,22 +146,80 @@ def test_backend_end_to_end():
     print("✓ PATCH /api/requests/{id}/status passed")
 
     # 8. Events
+    # Ensure test isolation by creating a dedicated test event with guaranteed capacity
+    test_event_id = f"evt-test-{unique_suffix}"
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO events (
+                id, title, performer_id, performer_name, performer_handle,
+                performer_avatar_url, performer_bio, art_form, sub_genre,
+                date, time, date_time_iso, venue_id, venue_name,
+                neighborhood, city, is_indoor, total_seats, available_seats,
+                price_label, seat_status, image_url, description,
+                cause_id, cause_name, cause_percentage, featured, is_demonstration
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (
+            test_event_id,
+            f"Test Resonance Showcase {unique_suffix}",
+            "perf-mehta",
+            "Aarav Mehta & Clara Dubois",
+            "@mehta.dubois",
+            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160",
+            "Test description",
+            "Music",
+            "Indo-Classical",
+            "Sat, Nov 28",
+            "7:30 PM",
+            "2026-11-28T19:30:00",
+            created_venue["id"],
+            created_venue["name"],
+            "Waterfront Arts",
+            "Kolkata",
+            1,
+            50,
+            3,  # Guaranteed initial capacity of 3 seats for capacity testing
+            "₹450",
+            "available",
+            "https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=900",
+            "Test event description",
+            "cause-01",
+            "Instruments for Riverbank Classrooms",
+            30.0,
+            1,
+            1
+        ))
+
     res = client.get("/api/events")
     assert res.status_code == 200
     events = res.json()
     assert len(events) >= 6
-    test_event = events[0]
+    test_event = next(e for e in events if e["id"] == test_event_id)
     initial_avail = test_event["seats"]["available"]
-    print(f"✓ GET /api/events passed ({len(events)} events, evt-01 available: {initial_avail})")
+    assert initial_avail == 3
+    print(f"✓ GET /api/events passed ({len(events)} events, test event available: {initial_avail})")
 
-    # 9. Book Event
+    # Booking capacity validation: booking exceeding available capacity (within schema max of 10) must be rejected with 400
+    overbook_tickets = initial_avail + 2  # 5 tickets requested when only 3 available
+    overbook_payload = {
+        "eventId": test_event["id"],
+        "ticketCount": overbook_tickets,
+        "attendeeName": "Overbook Tester",
+        "attendeeEmail": "overbook@example.com"
+    }
+    res_overbook = client.post("/api/bookings", json=overbook_payload, headers={"X-STAGE-Role": "audience"})
+    assert res_overbook.status_code == 400
+    assert "Not enough seats available" in res_overbook.json().get("detail", "")
+    print(f"✓ Booking capacity validation passed: rejected booking of {overbook_tickets} seats with 400 ({res_overbook.json().get('detail')})")
+
+    # 9. Book Event (valid capacity)
     booking_payload = {
         "eventId": test_event["id"],
         "ticketCount": 2,
         "attendeeName": "Kavita Rao",
         "attendeeEmail": "kavita.rao@example.com"
     }
-    res_booking = client.post("/api/bookings", json=booking_payload)
+    res_booking = client.post("/api/bookings", json=booking_payload, headers={"X-STAGE-Role": "audience"})
     assert res_booking.status_code == 201, f"Create booking failed: {res_booking.text}"
     created_booking = res_booking.json()
     assert created_booking["eventId"] == test_event["id"]
@@ -174,7 +262,7 @@ def test_backend_end_to_end():
             "verified": True
         }
     }
-    res_cause = client.post("/api/causes", json=cause_payload)
+    res_cause = client.post("/api/causes", json=cause_payload, headers={"X-STAGE-Role": "organiser"})
     assert res_cause.status_code == 201, f"Create cause failed: {res_cause.text}"
     created_cause = res_cause.json()
     assert created_cause["title"] == cause_title
@@ -234,4 +322,7 @@ def test_backend_end_to_end():
     print("==========================================")
 
 if __name__ == "__main__":
-    test_backend_end_to_end()
+    try:
+        test_backend_end_to_end()
+    finally:
+        cleanup_test_database()

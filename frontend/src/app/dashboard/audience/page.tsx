@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/Icons";
 import { Badge } from "@/components/ui/Badge";
 import { DigitalPassModal } from "@/components/dashboard/DigitalPassModal";
+import { EventDetailsModal } from "@/components/dashboard/EventDetailsModal";
+import { AudienceAiConcierge } from "@/components/dashboard/AudienceAiConcierge";
 import { useStageStore } from "@/context/StageStoreContext";
 import { AudienceBooking, PerformanceEvent } from "@/types";
 
@@ -21,6 +23,7 @@ export default function AudienceDashboardPage() {
   const { events, bookings, savedEventIds, toggleSaveEvent, bookEvent, causes } = useStageStore();
   const [activeTab, setActiveTab] = useState<"recommended" | "bookings" | "saved" | "history">("recommended");
   const [selectedPass, setSelectedPass] = useState<AudienceBooking | null>(null);
+  const [selectedEventModal, setSelectedEventModal] = useState<PerformanceEvent | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -114,44 +117,95 @@ export default function AudienceDashboardPage() {
 
         {/* Member Impact Numbers (Explicitly Identified as Simulated) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 mt-6 border-t border-[#F4F2EC]">
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Active Passes
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("bookings");
+              document.getElementById("audience-tabs")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View my booked passes"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#191817] flex items-center justify-between">
+              <span>Active Passes</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               {bookings.length} Booked
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Saved Wishlist
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("saved");
+              document.getElementById("audience-tabs")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View saved wishlist performances"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#C85A32] flex items-center justify-between">
+              <span>Saved Wishlist</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#C85A32]">
+            <div className="font-editorial text-2xl font-bold text-[#C85A32] mt-0.5">
               {savedEvents.length} Events
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Causes Supported
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setToastMessage(
+                `Causes Supported: Your passes have directly supported ${distinctCausesSupported} verified cultural cause campaigns across heritage preservation and youth music.`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view supported causes breakdown"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center justify-between">
+              <span>Causes Supported</span>
+              <span className="text-[10px] text-[#2D6638] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#2D6638]">
+            <div className="font-editorial text-2xl font-bold text-[#2D6638] mt-0.5">
               {distinctCausesSupported} {distinctCausesSupported === 1 ? "Campaign" : "Campaigns"}
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Impact Pledged</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setToastMessage(
+                `Total ₹${totalPledged.toLocaleString()} pledged to grassroots causes via verified pass bookings through STAGE deterministic ImpactFlow.`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view pledged contribution summary"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Impact Pledged</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#8E897F] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               ₹{totalPledged.toLocaleString()}
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
+      {/* In-Workspace AI Capabilities: Personalized Recommendations, iCal Sync, Duplicate Prevention & Linked Causes */}
+      <AudienceAiConcierge
+        onPassBookedSuccess={(code, title) => {
+          setToastMessage(`Reserved pass for '${title}'! Reference: ${code}`);
+          setTimeout(() => setToastMessage(null), 5000);
+        }}
+      />
+
       {/* Navigation Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#E8E5DC] pb-3 overflow-x-auto scrollbar-none">
+      <div id="audience-tabs" className="flex items-center gap-2 border-b border-[#E8E5DC] pb-3 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab("recommended")}
           type="button"
@@ -231,7 +285,9 @@ export default function AudienceDashboardPage() {
               return (
                 <div
                   key={event.id}
-                  className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+                  onClick={() => setSelectedEventModal(event)}
+                  className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs hover:shadow-xs hover:border-[#C85A32]/60 transition-all flex flex-col justify-between cursor-pointer group"
+                  title="Click to view full performance details & calendar options"
                 >
                   <div>
                     <div className="relative aspect-[16/9] bg-[#191817]">
@@ -249,7 +305,10 @@ export default function AudienceDashboardPage() {
 
                       {/* Favorite Button */}
                       <button
-                        onClick={() => toggleSaveEvent(event.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSaveEvent(event.id);
+                        }}
                         type="button"
                         className="absolute top-2.5 right-2.5 p-2 rounded-full bg-white/90 backdrop-blur-xs text-[#191817] hover:scale-110 transition-all shadow-xs"
                         aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
@@ -285,7 +344,10 @@ export default function AudienceDashboardPage() {
                         {event.seats.priceLabel}
                       </div>
                       <button
-                        onClick={() => handleQuickBook(event)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickBook(event);
+                        }}
                         disabled={isSoldOut}
                         type="button"
                         className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -399,7 +461,9 @@ export default function AudienceDashboardPage() {
               {savedEvents.map((event) => (
                 <div
                   key={event.id}
-                  className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs p-4 flex flex-col justify-between"
+                  onClick={() => setSelectedEventModal(event)}
+                  className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs p-4 flex flex-col justify-between hover:border-[#C85A32]/60 hover:shadow-xs transition-all cursor-pointer group"
+                  title="Click to view details & pass reservation"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -407,8 +471,11 @@ export default function AudienceDashboardPage() {
                         {event.artForm}
                       </Badge>
                       <button
-                        onClick={() => toggleSaveEvent(event.id)}
-                        className="text-[#C85A32]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSaveEvent(event.id);
+                        }}
+                        className="text-[#C85A32] p-1 hover:scale-110 transition-transform"
                       >
                         <HeartFilledIcon size={16} />
                       </button>
@@ -424,8 +491,11 @@ export default function AudienceDashboardPage() {
                   <div className="pt-3 mt-3 border-t border-[#F4F2EC] flex items-center justify-between">
                     <span className="text-xs font-semibold">{event.seats.priceLabel}</span>
                     <button
-                      onClick={() => handleQuickBook(event)}
-                      className="px-3 py-1 rounded-full bg-[#191817] text-white text-xs font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickBook(event);
+                      }}
+                      className="px-3 py-1 rounded-full bg-[#191817] text-white text-xs font-medium hover:bg-[#C85A32] transition-colors"
                     >
                       Book Now
                     </button>
@@ -488,6 +558,17 @@ export default function AudienceDashboardPage() {
         booking={selectedPass}
         onClose={() => setSelectedPass(null)}
       />
+
+      {/* Event Details Modal */}
+      {selectedEventModal && (
+        <EventDetailsModal
+          event={selectedEventModal}
+          isOpen={true}
+          onClose={() => setSelectedEventModal(null)}
+          onReservePass={(evt) => handleQuickBook(evt)}
+          isAlreadyBooked={bookings.some((b) => b.eventId === selectedEventModal.id)}
+        />
+      )}
     </div>
   );
 }

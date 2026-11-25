@@ -1,12 +1,30 @@
 """STAGE Root Orchestrator Agent.
 Coordinates StageMatch, CivicAssist, and ImpactFlow specialist agents via Google ADK native sub_agents.
 """
-from typing import Optional
+from typing import Optional, Union
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+from google.genai import types
 from app.config import settings
 from app.agents.stage_match import create_stage_match_agent
 from app.agents.civic_assist import create_civic_assist_agent
 from app.agents.impact_flow import create_impact_flow_agent
+
+DEFAULT_GEMINI_TIMEOUT_MS = 20_000  # 20.0s bounded request deadline
+
+def build_gemini_model(
+    model_name: Optional[Union[str, Gemini]] = None,
+    timeout_ms: int = DEFAULT_GEMINI_TIMEOUT_MS,
+) -> Gemini:
+    """Construct an ADK Gemini model instance with bounded HTTP timeouts."""
+    if isinstance(model_name, Gemini):
+        return model_name
+    target_name = model_name or settings.ai_model
+    return Gemini(
+        model=target_name,
+        client_kwargs={"http_options": types.HttpOptions(timeout=timeout_ms)},
+    )
 
 ORCHESTRATOR_INSTRUCTION = """You are stage_orchestrator, the central coordinating agent for STAGE — Where Talent Meets Purpose.
 STAGE connects performers, stage hosts, audiences, and social-impact organisations.
@@ -26,19 +44,23 @@ Your operational protocol:
 - Maintain a warm, editorial, professional voice fitting a premium cultural technology startup.
 """
 
-def create_stage_orchestrator(model: Optional[str] = None) -> LlmAgent:
-    """Instantiate the root STAGE Orchestrator agent with registered specialists."""
-    selected_model = model or settings.ai_model
+def create_stage_orchestrator(
+    model: Optional[Union[str, Gemini]] = None,
+    timeout_ms: int = DEFAULT_GEMINI_TIMEOUT_MS,
+    mcp_toolset: Optional[McpToolset] = None,
+) -> LlmAgent:
+    """Instantiate the root STAGE Orchestrator agent with registered specialists and bounded HTTP options."""
+    gemini_model = build_gemini_model(model, timeout_ms=timeout_ms)
 
-    stage_match = create_stage_match_agent(model=selected_model)
-    civic_assist = create_civic_assist_agent(model=selected_model)
-    impact_flow = create_impact_flow_agent(model=selected_model)
+    stage_match = create_stage_match_agent(model=gemini_model, mcp_toolset=mcp_toolset)
+    civic_assist = create_civic_assist_agent(model=gemini_model)
+    impact_flow = create_impact_flow_agent(model=gemini_model)
 
     return LlmAgent(
         name="stage_orchestrator",
         description="Root coordinating agent for the STAGE cultural platform that routes requests to StageMatch, CivicAssist, and ImpactFlow specialists.",
         instruction=ORCHESTRATOR_INSTRUCTION,
-        model=selected_model,
+        model=gemini_model,
         sub_agents=[
             stage_match,
             civic_assist,

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { VenueImage } from "@/components/ui/VenueImage";
 import {
   BuildingIcon,
   PlusIcon,
@@ -10,18 +11,36 @@ import {
   CalendarIcon,
   UsersIcon,
   CheckCircleIcon,
+  ClockIcon,
+  SparklesIcon,
 } from "@/components/ui/Icons";
 import { Badge } from "@/components/ui/Badge";
 import { AddVenueModal } from "@/components/dashboard/AddVenueModal";
+import { RequestDetailsModal } from "@/components/requests/RequestDetailsModal";
+import { ReturnRequestModal } from "@/components/requests/ReturnRequestModal";
+import { VenueDetailsModal } from "@/components/dashboard/VenueDetailsModal";
+import { ProviderAiDecisionSupport } from "@/components/dashboard/ProviderAiDecisionSupport";
 import { useStageStore } from "@/context/StageStoreContext";
+import { PerformanceRequest, StageVenue } from "@/types";
 
 export default function StageProviderDashboardPage() {
   const { venues, requests, events, updateRequestStatus } = useStageStore();
   const [isAddVenueOpen, setIsAddVenueOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Modals for Request details, Return for Changes, and Venue details
+  const [detailsModalReq, setDetailsModalReq] = useState<PerformanceRequest | null>(null);
+  const [returnModalReq, setReturnModalReq] = useState<PerformanceRequest | null>(null);
+  const [selectedVenueModal, setSelectedVenueModal] = useState<StageVenue | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "returned" | "approved">("all");
+
   const incomingRequests = requests;
   const pendingRequests = incomingRequests.filter((r) => r.status === "pending");
+
+  const filteredRequests = incomingRequests.filter((r) => {
+    if (filterStatus === "all") return true;
+    return r.status === filterStatus;
+  });
 
   // Dynamic calculations across hosted events
   const totalAudienceHosted = events.reduce(
@@ -31,15 +50,21 @@ export default function StageProviderDashboardPage() {
   // Simulated facility share: base ₹45,000 + ₹150 facility share per ticket
   const simulatedHostFees = 45000 + Math.round(totalAudienceHosted * 150);
 
-  const handleApprove = (id: string, title: string) => {
-    updateRequestStatus(id, "approved", "Approved by venue host. Technical sound check scheduled.");
+  const handleApprove = (id: string, title: string, note?: string) => {
+    updateRequestStatus(id, "approved", note || "Approved by venue host. Technical sound check scheduled.");
     setToastMessage(`Request '${title}' approved! Added to scheduled performances.`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const handleReject = (id: string, title: string) => {
-    updateRequestStatus(id, "rejected", "Declined: Date conflict or capacity constraints.");
+  const handleReject = (id: string, title: string, note?: string) => {
+    updateRequestStatus(id, "rejected", note || "Declined: Date conflict or capacity constraints.");
     setToastMessage(`Request '${title}' declined.`);
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const handleReturn = (id: string, title: string, note?: string) => {
+    updateRequestStatus(id, "returned", note || "Returned for technical rider clarification or alternate date.");
+    setToastMessage(`Request '${title}' returned to performer for adjustment.`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
@@ -82,7 +107,7 @@ export default function StageProviderDashboardPage() {
               Heritage Arts Trust & Allied Stage Stewards · {venues.length} Managed Locations
             </p>
             <p className="text-xs sm:text-sm text-[#5A554D] max-w-2xl leading-relaxed pt-1">
-              Curate incoming performer riders, schedule acoustic sound checks, and manage physical availability across your spaces.
+              Curate incoming performer riders, schedule acoustic sound checks, request revisions, and manage physical availability across your spaces.
             </p>
           </div>
 
@@ -98,68 +123,158 @@ export default function StageProviderDashboardPage() {
           </div>
         </div>
 
-        {/* Operational Metrics (Explicitly Identified as Simulated) */}
+        {/* Operational Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 mt-6 border-t border-[#F4F2EC]">
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Listed Stages
+          <button
+            type="button"
+            onClick={() => document.getElementById("listed-spaces")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View managed performance spaces"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#191817] flex items-center justify-between">
+              <span>Listed Stages</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               {venues.length} Spaces
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Pending Pitches
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilterStatus("pending");
+              document.getElementById("incoming-pitches")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Filter pending pitches awaiting host review"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#C85A32] flex items-center justify-between">
+              <span>Pending Pitches</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ Review</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#C85A32]">
+            <div className="font-editorial text-2xl font-bold text-[#C85A32] mt-0.5">
               {pendingRequests.length} Waiting
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Simulated Host Fees</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setToastMessage(
+                `Simulated Host Fees: ₹45,000 baseline reserve + ₹150 facility share per guest hosted across your ${venues.length} stages (${totalAudienceHosted} attendees total).`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view host fee structure"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Simulated Fees</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#8E897F] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               ₹{simulatedHostFees.toLocaleString()}
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Audience Hosted</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setToastMessage(
+                `Audience Hosted: ${totalAudienceHosted} guests attended performances at your venues with verified check-in procedures.`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view hosted guest metrics"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Audience Hosted</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#2D6638] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#2D6638]">
+            <div className="font-editorial text-2xl font-bold text-[#2D6638] mt-0.5">
               {totalAudienceHosted} Guests
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
-      {/* Section 1: Incoming Performer Requests (Approve / Reject) */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
+      {/* In-Workspace AI Capabilities: Evaluation, Compatibility Scoring, Decision Support & Confirmation */}
+      <ProviderAiDecisionSupport
+        onRequestApproved={handleApprove}
+        onRequestRejected={handleReject}
+        onRequestReturned={handleReturn}
+      />
+
+      {/* Section 1: Incoming Performer Requests (Approve / Return / Reject) */}
+      <section id="incoming-pitches" className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
-              Incoming Performer Requests
+              Incoming Performer Pitches
             </h2>
             <p className="text-xs text-[#6B665E]">
-              Review performance pitches, requested dates, and riders submitted by artists.
+              Review technical riders, approve dates, or request adjustments before clearing sound checks.
             </p>
           </div>
-          <span className="text-xs font-mono text-[#8E897F]">
-            {pendingRequests.length} Pending Actions
-          </span>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white border border-[#E8E5DC] text-xs">
+            <button
+              onClick={() => setFilterStatus("all")}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                filterStatus === "all"
+                  ? "bg-[#191817] text-white font-semibold"
+                  : "text-[#6B665E] hover:text-[#191817]"
+              }`}
+            >
+              All ({incomingRequests.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("pending")}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                filterStatus === "pending"
+                  ? "bg-[#C85A32] text-white font-semibold"
+                  : "text-[#6B665E] hover:text-[#191817]"
+              }`}
+            >
+              Pending ({pendingRequests.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("returned")}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                filterStatus === "returned"
+                  ? "bg-[#6B21A8] text-white font-semibold"
+                  : "text-[#6B665E] hover:text-[#191817]"
+              }`}
+            >
+              Changes Requested ({incomingRequests.filter((r) => r.status === "returned").length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("approved")}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                filterStatus === "approved"
+                  ? "bg-[#2D6638] text-white font-semibold"
+                  : "text-[#6B665E] hover:text-[#191817]"
+              }`}
+            >
+              Approved ({incomingRequests.filter((r) => r.status === "approved").length})
+            </button>
+          </div>
         </div>
 
-        {incomingRequests.length === 0 ? (
+        {filteredRequests.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-[#D5D1C6] text-xs text-[#8E897F]">
-            No incoming requests currently.
+            No pitches matching &lsquo;{filterStatus}&rsquo;.
           </div>
         ) : (
           <div className="space-y-3">
-            {incomingRequests.map((req) => (
+            {filteredRequests.map((req) => (
               <div
                 key={req.id}
                 className="bg-white p-5 rounded-2xl border border-[#E8E5DC] shadow-2xs hover:border-[#D5D1C6] transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -190,40 +305,81 @@ export default function StageProviderDashboardPage() {
                       <UsersIcon size={12} />
                       Expected: ~{req.expectedAudienceSize} guests
                     </span>
-                    <span className="font-mono text-[11px] text-[#8E897F]">
-                      Simulated Budget: ₹{req.budget.toLocaleString()}
+                    <span className="font-mono text-[11px] text-[#2D6638]">
+                      Budget: {req.currency} {req.budget.toLocaleString()}
                     </span>
                   </div>
 
                   <p className="text-xs text-[#5A554D] italic line-clamp-1 pt-0.5">
-                    Rider note: &ldquo;{req.description}&rdquo;
+                    Rider: &ldquo;{req.description}&rdquo;
                   </p>
+
+                  {req.reviewNote && (
+                    <div className="pt-1">
+                      <span
+                        className={`text-[11px] font-medium px-2.5 py-1 rounded-lg inline-block ${
+                          req.status === "returned"
+                            ? "bg-[#FAF5FF] text-[#6B21A8] border border-[#E9D5FF]"
+                            : req.status === "approved"
+                            ? "bg-[#EDF5ED] text-[#2D6638]"
+                            : "bg-[#F4F2EC] text-[#5A554D]"
+                        }`}
+                      >
+                        Feedback note: {req.reviewNote}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions or Status */}
                 <div className="shrink-0 flex items-center gap-2 self-start md:self-center">
+                  {/* View Details */}
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModalReq(req)}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium text-[#191817] bg-[#F4F2EC] hover:bg-[#ECEAE1] transition-colors"
+                  >
+                    View Details
+                  </button>
+
                   {req.status === "pending" ? (
                     <>
                       <button
                         onClick={() => handleApprove(req.id, req.title)}
                         type="button"
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#2D6638] text-white hover:bg-[#23522c] transition-colors shadow-2xs"
+                        className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#2D6638] text-white hover:bg-[#23522c] transition-colors shadow-2xs"
                       >
                         <CheckIcon size={13} />
                         <span>Approve</span>
                       </button>
                       <button
+                        onClick={() => setReturnModalReq(req)}
+                        type="button"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FAF5FF] text-[#6B21A8] border border-[#E9D5FF] hover:bg-[#F3E8FF] transition-colors"
+                      >
+                        <ClockIcon size={13} />
+                        <span>Request Changes</span>
+                      </button>
+                      <button
                         onClick={() => handleReject(req.id, req.title)}
                         type="button"
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-[#C53030] border border-[#F8D2C9] hover:bg-[#FDF0ED] transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-[#C53030] border border-[#F8D2C9] hover:bg-[#FDF0ED] transition-colors"
                       >
                         <XIcon size={13} />
                         <span>Decline</span>
                       </button>
                     </>
+                  ) : req.status === "returned" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F5F0FF] text-[#6B21A8] border border-[#E9D5FF]">
+                      <ClockIcon size={13} /> Changes Requested
+                    </span>
                   ) : req.status === "approved" ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EDF5ED] text-[#2D6638] border border-[#CFE4CF]">
                       <CheckCircleIcon size={13} /> Approved
+                    </span>
+                  ) : req.status === "withdrawn" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F4F2EC] text-[#6B665E] border border-[#E8E5DC]">
+                      <XIcon size={13} /> Withdrawn
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FDF0ED] text-[#C53030] border border-[#F8D2C9]">
@@ -238,7 +394,7 @@ export default function StageProviderDashboardPage() {
       </section>
 
       {/* Section 2: Manage Listed Venues */}
-      <section className="space-y-4">
+      <section id="listed-spaces" className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
@@ -248,7 +404,7 @@ export default function StageProviderDashboardPage() {
               Your active performance locations available for artist discovery ({venues.length} spaces listed).
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="status" size="sm">
             Live Directory
           </Badge>
         </div>
@@ -257,13 +413,18 @@ export default function StageProviderDashboardPage() {
           {venues.map((venue) => (
             <div
               key={venue.id}
-              className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs flex flex-col justify-between"
+              onClick={() => setSelectedVenueModal(venue)}
+              className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs hover:border-[#C85A32]/60 hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer group"
+              title="Click to view space details, amenities & host policy"
             >
               <div>
                 <div className="relative aspect-[16/8] bg-[#191817]">
-                  <Image
+                  <VenueImage
                     src={venue.imageUrl}
                     alt={venue.name}
+                    venueId={venue.id}
+                    venueName={venue.name}
+                    venueType={venue.venueType}
                     fill
                     className="object-cover"
                   />
@@ -330,7 +491,7 @@ export default function StageProviderDashboardPage() {
               Confirmed calendar of upcoming gigs scheduled at your spaces (all figures explicitly simulated).
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="outline" size="sm">
             Simulated Revenue
           </Badge>
         </div>
@@ -375,6 +536,48 @@ export default function StageProviderDashboardPage() {
         onClose={() => setIsAddVenueOpen(false)}
         onSuccessToast={handleVenueAdded}
       />
+
+      {/* Request Details Modal */}
+      {detailsModalReq && (
+        <RequestDetailsModal
+          request={detailsModalReq}
+          isOpen={true}
+          onClose={() => setDetailsModalReq(null)}
+          onApprove={() => {
+            handleApprove(detailsModalReq.id, detailsModalReq.title);
+            setDetailsModalReq(null);
+          }}
+          onDecline={() => {
+            handleReject(detailsModalReq.id, detailsModalReq.title);
+            setDetailsModalReq(null);
+          }}
+          onRequestChanges={() => {
+            setReturnModalReq(detailsModalReq);
+            setDetailsModalReq(null);
+          }}
+          viewerRole="provider"
+        />
+      )}
+
+      {/* Return for Changes Modal */}
+      {returnModalReq && (
+        <ReturnRequestModal
+          request={returnModalReq}
+          isOpen={true}
+          onClose={() => setReturnModalReq(null)}
+          onReturned={(title) => setToastMessage(`Revision feedback sent for pitch '${title}'.`)}
+        />
+      )}
+
+      {/* Venue Details Modal */}
+      {selectedVenueModal && (
+        <VenueDetailsModal
+          venue={selectedVenueModal}
+          isOpen={true}
+          onClose={() => setSelectedVenueModal(null)}
+          viewerRole="provider"
+        />
+      )}
     </div>
   );
 }

@@ -58,7 +58,7 @@ export function FeaturedPerformances({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Badge variant="terracotta">Curated Season</Badge>
-              <Badge variant="demo">Demo Data</Badge>
+              <Badge variant="outline">Live Season</Badge>
             </div>
             <h2 className="font-editorial text-3xl sm:text-4xl font-medium text-[#191817]">
               Featured Performances
@@ -169,7 +169,7 @@ export function FeaturedPerformances({
                     </div>
 
                     <div className="absolute top-3 right-3">
-                      <Badge variant="demo">Demo</Badge>
+                      <Badge variant="status">Live</Badge>
                     </div>
 
                     {/* Bottom overlay: Date & Time */}

@@ -7,6 +7,27 @@ export type ArtCategory =
   | "Street Performance";
 
 export type RoleType = "performer" | "provider" | "audience" | "organiser";
+export type UserRole = RoleType | "admin";
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarUrl?: string;
+  bio?: string;
+  createdAt?: string;
+}
+
+export interface RequestStatusHistoryEntry {
+  timestamp: string;
+  action: string;
+  fromStatus?: string;
+  toStatus: string;
+  actorRole: string;
+  actorName?: string;
+  note?: string;
+}
 
 export interface PerformanceEvent {
   id: string;
@@ -107,9 +128,14 @@ export interface PerformanceRequest {
   budget: number;
   currency: string;
   description: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "returned" | "withdrawn";
   createdAt: string;
   reviewNote?: string;
+  technicalRider?: string;
+  durationMinutes?: number;
+  notes?: string;
+  updatedAt?: string;
+  statusHistory?: RequestStatusHistoryEntry[];
 }
 
 export interface AudienceBooking {
@@ -179,4 +205,38 @@ export interface AiCommandResponse {
   agent_execution_events: AgentExecutionEvent[];
   model_used: string;
   created_at: string;
+}
+
+export interface UserSettings {
+  user_id: string;
+  theme: "light" | "dark" | "system";
+  layout_density: "comfortable" | "compact";
+  email_notifications: boolean;
+  booking_confirmations: boolean;
+  request_status_updates: boolean;
+  cause_updates: boolean;
+  ai_recommendations: boolean;
+  proactive_ai_assistance: boolean;
+  ai_notification_preferences: "all" | "urgent" | "none";
+  preferred_recommendation_categories: string[];
+  calendar_sync_enabled: boolean;
+  calendar_provider: "download_ics" | "google" | "apple";
+  reminder_advance_hours: number;
+}
+
+export interface ReminderItem {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  venue: string;
+  status: string;
+  type: string;
+  note?: string;
+}
+
+export interface OAuthProvidersStatus {
+  google: { configured: boolean; clientId: string | null; message: string };
+  apple: { configured: boolean; serviceId: string | null; message: string };
+  phone: { configured: boolean; gateway: string; testOtp: string; message: string };
 }

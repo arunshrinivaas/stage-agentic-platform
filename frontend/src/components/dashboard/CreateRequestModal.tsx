@@ -100,7 +100,7 @@ export function CreateRequestModal({
               Your request has been dispatched to stage hosts. You can track host review status directly in your performer dashboard.
             </p>
             <div className="p-3 bg-[#FAF4EB] border border-[#ECD9BA] rounded-xl text-xs text-[#A66E2E] mb-6">
-              <strong>Demo Hint:</strong> Switch to the <strong>Stage Provider</strong> dashboard via the top role switcher to review and approve/reject this request.
+              <strong>Review Status:</strong> Venue stewards will review your technical rider, check acoustic fit, and schedule a soundcheck.
             </div>
             <button
               onClick={() => {
@@ -116,7 +116,7 @@ export function CreateRequestModal({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Badge variant="terracotta">New Stage Pitch</Badge>
-              <Badge variant="demo">Demo Simulation</Badge>
+              <Badge variant="status">Live Arts Network</Badge>
             </div>
 
             <h3 className="font-editorial text-2xl font-medium text-[#191817] mb-1">
@@ -257,7 +257,7 @@ export function CreateRequestModal({
               <button
                 type="submit"
                 disabled={isSubmitted}
-                className="w-full py-3 px-5 rounded-full bg-[#C85A32] text-white hover:bg-[#B54D27] font-medium text-sm transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-5 rounded-full bg-[#191817] hover:bg-[#C85A32] text-white font-medium text-sm transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Submit Performance Pitch
               </button>

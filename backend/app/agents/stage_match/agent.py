@@ -1,5 +1,15 @@
 """StageMatch specialist agent definition using Google ADK."""
+import os
+import sys
+from typing import Optional, Union
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.adk.tools.mcp_tool.mcp_toolset import (
+    McpToolset,
+    StdioConnectionParams,
+    StdioServerParameters,
+)
+from google.genai import types
 from app.config import settings
 from .tools import (
     search_stages,
@@ -23,19 +33,61 @@ Strict Execution Boundaries:
 - You cannot automatically approve venue bookings; inform the user that final approval rests with the stage host.
 """
 
-def create_stage_match_agent(model: str | None = None) -> LlmAgent:
+
+def build_venue_mcp_toolset(
+    timeout: float = 5.0,
+    backend_dir: Optional[str] = None,
+) -> McpToolset:
+    """Construct an ADK McpToolset configured for the local venue MCP server."""
+    if backend_dir is None:
+        backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+    server_params = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "app.mcp_server.venue_server"],
+        cwd=backend_dir,
+    )
+    conn_params = StdioConnectionParams(
+        server_params=server_params,
+        timeout=timeout,
+    )
+    return McpToolset(
+        connection_params=conn_params,
+        tool_filter=["search_stages", "get_stage_details"],
+    )
+
+
+def create_stage_match_agent(
+    model: Optional[Union[str, Gemini]] = None,
+    mcp_toolset: Optional[McpToolset] = None,
+) -> LlmAgent:
     """Instantiate the StageMatch ADK specialist agent."""
-    selected_model = model or settings.ai_model
+    if isinstance(model, Gemini):
+        selected_model = model
+    elif isinstance(model, str):
+        selected_model = Gemini(model=model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
+    else:
+        selected_model = Gemini(model=settings.ai_model, client_kwargs={"http_options": types.HttpOptions(timeout=20_000)})
+
+    if mcp_toolset is not None:
+        agent_tools = [
+            mcp_toolset,
+            calculate_match_score,
+            get_performer_requests,
+        ]
+    else:
+        agent_tools = [
+            search_stages,
+            get_stage_details,
+            calculate_match_score,
+            get_performer_requests,
+        ]
+
     return LlmAgent(
         name="stage_match",
         description="Specialist agent that searches, evaluates, and deterministically ranks performance venues for artists.",
         instruction=STAGE_MATCH_INSTRUCTION,
         model=selected_model,
-        tools=[
-            search_stages,
-            get_stage_details,
-            calculate_match_score,
-            get_performer_requests,
-        ],
+        tools=agent_tools,
     )
 

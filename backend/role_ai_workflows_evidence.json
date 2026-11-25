@@ -1,0 +1,75 @@
+{
+  "performer": {
+    "role": "performer",
+    "user_id": "usr-aarav",
+    "endpoint": "/api/ai/command",
+    "request": "Find an acoustic stage in Bangalore for a 50-seat classical sitar performance",
+    "execution_mode": "offline_fallback_after_live_error",
+    "agents_selected": [
+      "stage_match"
+    ],
+    "tools_invoked": [
+      "search_stages",
+      "calculate_match_score"
+    ],
+    "response_length": 566,
+    "response_excerpt": "### Stage Recommendation (via StageMatch)\n\n**Top Recommended Space:** Rehearsal Admin Test Venue eeea74 (Downtown, Kolkata)\n- **Venue Type:** Loft\n- **Capacity:** 50 seated / 100 standing\n- **Deterministic Match Score:** **90/100** (Recommended)\n- **Compatibility Rationale:** Rehearsal Admin Test Ve",
+    "events_count": 16
+  },
+  "provider": {
+    "role": "provider",
+    "user_id": "usr-heritage",
+    "endpoint": "/api/ai/command",
+    "request": "Evaluate the compatibility of the incoming pitch 'Acoustic Chamber Recital' for our natural stone amphitheater",
+    "execution_mode": "offline_fallback_after_live_error",
+    "agents_selected": [
+      "stage_match"
+    ],
+    "tools_invoked": [
+      "search_stages",
+      "calculate_match_score"
+    ],
+    "response_length": 566,
+    "response_excerpt": "### Stage Recommendation (via StageMatch)\n\n**Top Recommended Space:** Rehearsal Admin Test Venue eeea74 (Downtown, Kolkata)\n- **Venue Type:** Loft\n- **Capacity:** 50 seated / 100 standing\n- **Deterministic Match Score:** **90/100** (Recommended)\n- **Compatibility Rationale:** Rehearsal Admin Test Ve",
+    "events_count": 16
+  },
+  "audience": {
+    "role": "audience",
+    "user_id": "usr-rhea",
+    "endpoint": "/api/ai/command",
+    "request": "Recommend an upcoming unamplified classical music event in Kolkata matching my taste in acoustic chamber strings",
+    "execution_mode": "offline_fallback_after_live_error",
+    "agents_selected": [
+      "stage_match"
+    ],
+    "tools_invoked": [
+      "search_stages",
+      "calculate_match_score"
+    ],
+    "response_length": 566,
+    "response_excerpt": "### Stage Recommendation (via StageMatch)\n\n**Top Recommended Space:** Rehearsal Admin Test Venue eeea74 (Downtown, Kolkata)\n- **Venue Type:** Loft\n- **Capacity:** 50 seated / 100 standing\n- **Deterministic Match Score:** **90/100** (Recommended)\n- **Compatibility Rationale:** Rehearsal Admin Test Ve",
+    "events_count": 16
+  },
+  "organiser": {
+    "role": "organiser",
+    "user_id": "usr-delta",
+    "endpoint": "/api/ai/command",
+    "request": "Explain the contribution allocation for the Youth Arts Education campaign and prepare the civic permit checklist for our fundraising concert",
+    "execution_mode": "offline_fallback_after_live_error",
+    "agents_selected": [
+      "civic_assist",
+      "impact_flow"
+    ],
+    "tools_invoked": [
+      "classify_venue",
+      "retrieve_civic_guidance_rag",
+      "generate_permission_checklist",
+      "get_campaign_details",
+      "calculate_contribution_allocation",
+      "generate_impact_report"
+    ],
+    "response_length": 5319,
+    "response_excerpt": "### Regulatory Guidance & Checklist (via CivicAssist)\n\n- **Venue:** The Vault Amphitheater (Kolkata)\n- **Jurisdiction Tier:** Public Heritage Amphitheatre / Civic Monument (Municipal Corporation & Heritage Preservation Authority)\n- **Recommended Lead Time:** 21 business days prior to performance\n- *",
+    "events_count": 25
+  }
+}

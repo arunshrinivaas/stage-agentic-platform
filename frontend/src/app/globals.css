@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root {
+:root, [data-theme="light"] {
   --background: #FAFAF7;
   --foreground: #191817;
   --surface: #F4F2EC;
@@ -16,6 +16,22 @@
   --subtle-text: #8E897F;
   --font-serif: "Newsreader", "Playfair Display", "Iowan Old Style", "Charter", "Georgia", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+[data-theme="dark"], .dark {
+  --background: #141312;
+  --foreground: #F5F3EF;
+  --surface: #1E1C1A;
+  --surface-hover: #292723;
+  --surface-card: #1A1816;
+  --border-subtle: #2D2A26;
+  --border-strong: #45413A;
+  --terracotta: #E67A52;
+  --terracotta-hover: #F08E6A;
+  --terracotta-light: #2A1C15;
+  --terracotta-muted: #E68A68;
+  --muted-text: #ABA69C;
+  --subtle-text: #787369;
 }
 
 @theme inline {

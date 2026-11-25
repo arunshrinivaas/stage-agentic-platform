@@ -2,9 +2,11 @@ import re
 import time
 import random
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
-from typing import List
+from decimal import Decimal
+from fastapi import APIRouter, HTTPException, Depends
+from typing import List, Optional
 from app.database import get_db
+from app.services.auth import require_role
 from app.schemas.event import (
     EventResponse,
     EventPerformer,
@@ -13,6 +15,9 @@ from app.schemas.event import (
     EventLinkedCause,
 )
 from app.schemas.booking import BookingCreate, BookingResponse
+from app.services.outbox import record_outbox_event
+from app.services.pass_service import issue_digital_pass
+from app.services.financial_settlement import create_settlement_for_contribution
 
 router = APIRouter(prefix="/api", tags=["Events & Bookings"])
 
@@ -67,10 +72,26 @@ def get_events():
         return [row_to_event(r) for r in rows]
 
 @router.get("/bookings", response_model=List[BookingResponse])
-def get_bookings():
+def get_bookings(
+    event_id: Optional[str] = None,
+    attendee_email: Optional[str] = None,
+):
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM bookings ORDER BY booked_at DESC;")
+        query = "SELECT * FROM bookings"
+        params = []
+        conditions = []
+        if event_id:
+            conditions.append("event_id = ?")
+            params.append(event_id)
+        if attendee_email:
+            conditions.append("LOWER(attendee_email) = LOWER(?)")
+            params.append(attendee_email.strip())
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY booked_at DESC;"
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         return [
             BookingResponse(
@@ -99,7 +120,10 @@ def get_bookings():
         ]
 
 @router.post("/bookings", response_model=BookingResponse, status_code=201)
-def create_booking(payload: BookingCreate):
+def create_booking(
+    payload: BookingCreate,
+    current_user: dict = Depends(require_role(["audience"])),
+):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM events WHERE id = ?;", (payload.eventId,))
@@ -198,12 +222,79 @@ def create_booking(payload: BookingCreate):
                 cause_contrib,
             ))
 
+            # Create deterministic financial settlement record
+            create_settlement_for_contribution(
+                contribution_id=led_id,
+                campaign_id=event["cause_id"],
+                event_id=event["id"],
+                gross_amount=Decimal(str(total_paid)),
+                currency="₹",
+                conn=conn,
+            )
+
+            # Record transactional outbox event for contribution
+            record_outbox_event(
+                conn=conn,
+                event_type="contribution.recorded",
+                aggregate_type="contribution",
+                aggregate_id=led_id,
+                payload={
+                    "id": led_id,
+                    "cause_id": event["cause_id"],
+                    "cause_title": event["cause_name"] or "Social Impact Initiative",
+                    "event_id": event["id"],
+                    "event_title": event["title"],
+                    "performer_name": event["performer_name"],
+                    "venue_name": event["venue_name"],
+                    "booking_id": booking_id,
+                    "tickets_sold": payload.ticketCount,
+                    "gross_proceeds": total_paid,
+                    "impact_amount": cause_contrib,
+                    "currency": "₹",
+                },
+            )
+
         # 4. Push booking notification
         notif_id = f"notif-{int(time.time() * 1000)}"
         cursor.execute("""
         INSERT INTO notifications (id, role, title, message, timestamp, read, type)
         VALUES (?, 'audience', 'Booking Confirmed', ?, 'Just now', 0, 'booking');
         """, (notif_id, f"Pass {booking_code} for '{event['title']}' is confirmed."))
+
+        # 5. Record transactional outbox event for booking
+        record_outbox_event(
+            conn=conn,
+            event_type="booking.created",
+            aggregate_type="booking",
+            aggregate_id=booking_id,
+            payload={
+                "id": booking_id,
+                "booking_code": booking_code,
+                "event_id": event["id"],
+                "event_title": event["title"],
+                "event_art_form": event["art_form"],
+                "event_date": event["date"],
+                "venue_name": event["venue_name"],
+                "city": event["city"],
+                "ticket_count": payload.ticketCount,
+                "total_paid": total_paid,
+                "currency": "₹",
+                "attendee_name": payload.attendeeName,
+                "attendee_email": payload.attendeeEmail,
+                "linked_cause_name": event["cause_name"],
+                "cause_contribution_amount": cause_contrib,
+                "status": "confirmed",
+            },
+        )
+
+        # 6. Issue verified digital pass
+        issue_digital_pass(
+            booking_id=booking_id,
+            event_id=event["id"],
+            user_id=current_user.get("id"),
+            booking_code=booking_code,
+            conn=conn,
+        )
 
         cursor.execute("SELECT * FROM bookings WHERE id = ?;", (booking_id,))
         row = cursor.fetchone()

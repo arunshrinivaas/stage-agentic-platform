@@ -4,6 +4,7 @@ Searches SQLite venue records and performs deterministic matching calculations.
 from typing import Optional, List, Dict, Any
 import json
 from app.database import get_db
+from app.services import venue_cache
 
 def search_stages(
     city: Optional[str] = None,
@@ -22,6 +23,36 @@ def search_stages(
     Returns:
         A list of matching venue records with capacity, categories, and amenities.
     """
+    # 1. Attempt to verify durable generation for cache lookup; fail closed if unavailable
+    current_gen: Optional[int] = None
+    try:
+        current_gen = venue_cache.get_durable_generation()
+    except Exception:
+        current_gen = None
+
+    if current_gen is not None:
+        try:
+            cached = venue_cache.get_cached_search(
+                city=city,
+                art_form=art_form,
+                min_capacity=min_capacity,
+                max_capacity=max_capacity,
+                generation=current_gen,
+            )
+            if cached is not None:
+                # Post-read verification: re-verify durable generation to eliminate race
+                # condition if venue creation committed generation G+1 during cache lookup.
+                try:
+                    verify_gen = venue_cache.get_durable_generation()
+                except Exception:
+                    verify_gen = None
+
+                if verify_gen is not None and verify_gen == current_gen:
+                    return cached
+                # If generation changed or verification failed, discard cached result and execute SQLite query
+        except Exception:
+            pass
+
     query = "SELECT * FROM stage_venues WHERE 1=1"
     params: List[Any] = []
 
@@ -40,6 +71,13 @@ def search_stages(
     query += " ORDER BY seated_capacity ASC"
 
     with get_db() as conn:
+        # Snapshot durable generation within the EXACT SAME SQLite transaction as the query
+        read_gen: Optional[int] = None
+        try:
+            read_gen = venue_cache.get_durable_generation(conn)
+        except Exception:
+            read_gen = None
+
         cursor = conn.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -79,7 +117,21 @@ def search_stages(
                 "host_policy": r["host_policy"],
             })
 
-        return results
+    # Only write to Redis if the generation snapshot was verified in the transaction
+    if read_gen is not None:
+        try:
+            venue_cache.set_cached_search(
+                city=city,
+                art_form=art_form,
+                min_capacity=min_capacity,
+                max_capacity=max_capacity,
+                results=results,
+                generation=read_gen,
+            )
+        except Exception:
+            pass
+
+    return results
 
 def get_stage_details(venue_id: str) -> Dict[str, Any]:
     """Retrieve full specifications and host policies for a specific venue.

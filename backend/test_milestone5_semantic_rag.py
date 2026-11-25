@@ -186,7 +186,7 @@ def test_k_offline_retrieval_without_gemini_credentials():
 
 
 def test_l_full_api_command_integration():
-    """Test L: Full compound multi-agent execution via POST /api/ai/command with ChromaDB telemetry."""
+    """Test L: Full compound multi-agent execution via POST /api/ai/command with ChromaDB telemetry (deterministic mock)."""
     print("\n[Test L] POST /api/ai/command integration...")
     client = TestClient(app)
     response = client.post(
@@ -194,11 +194,13 @@ def test_l_full_api_command_integration():
         json={
             "user_id": "usr-aarav",
             "message": "Find a suitable stage in Chennai for an acoustic performance, check civic sound permissions, and explain the campaign allocation.",
+            "force_mock": True,
         },
     )
     assert response.status_code == 200
     data = response.json()
     assert data["execution_status"] == "completed"
+    assert data["execution_mode"] == "offline_deterministic"
     assert "stage_match" in data["selected_specialist_agents"]
     assert "civic_assist" in data["selected_specialist_agents"]
     assert "impact_flow" in data["selected_specialist_agents"]
@@ -209,6 +211,7 @@ def test_l_full_api_command_integration():
     result_event = next(e for e in rag_events if e["event_type"] == "tool_result")
     assert result_event["tool_output"]["retrieval_mode"] == "chromadb_semantic"
     assert result_event["tool_output"]["evidence_count"] >= 1
+    assert len(result_event["tool_output"]["citations"]) >= 1
     print("✓ Test L Passed: Multi-agent compound workflow executed with ChromaDB semantic RAG telemetry.")
 
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { VenueImage } from "@/components/ui/VenueImage";
 import {
   CalendarIcon,
   MapPinIcon,
@@ -12,16 +13,34 @@ import {
   XCircleIcon,
   BuildingIcon,
   ShieldCheckIcon,
+  XIcon,
+  SparklesIcon,
 } from "@/components/ui/Icons";
 import { Badge } from "@/components/ui/Badge";
 import { CreateRequestModal } from "@/components/dashboard/CreateRequestModal";
+import { RequestDetailsModal } from "@/components/requests/RequestDetailsModal";
+import { EditRequestModal } from "@/components/requests/EditRequestModal";
+import { VenueDetailsModal } from "@/components/dashboard/VenueDetailsModal";
+import { EventDetailsModal } from "@/components/dashboard/EventDetailsModal";
+import { PerformerAiCopilot } from "@/components/dashboard/PerformerAiCopilot";
 import { useStageStore } from "@/context/StageStoreContext";
+import { PerformanceRequest, StageVenue, PerformanceEvent } from "@/types";
 
 export default function PerformerDashboardPage() {
-  const { requests, venues, events } = useStageStore();
+  const { requests, venues, events, withdrawRequest, resubmitRequest } = useStageStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [preselectedVenueId, setPreselectedVenueId] = useState<string | undefined>(undefined);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Request Lifecycle Modals
+  const [detailsModalReq, setDetailsModalReq] = useState<PerformanceRequest | null>(null);
+  const [editModalReq, setEditModalReq] = useState<PerformanceRequest | null>(null);
+  const [withdrawModalReq, setWithdrawModalReq] = useState<PerformanceRequest | null>(null);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  // Functional Tile Modals
+  const [selectedGigModal, setSelectedGigModal] = useState<PerformanceEvent | null>(null);
+  const [selectedVenueModal, setSelectedVenueModal] = useState<StageVenue | null>(null);
 
   const performerRequests = requests.filter((r) => r.performerId === "perf-mehta");
   const upcomingGigs = events.filter((e) => e.performer.name.includes("Aarav Mehta"));
@@ -41,9 +60,38 @@ export default function PerformerDashboardPage() {
     setIsModalOpen(true);
   };
 
-  const handleToast = (title: string) => {
-    setToastMessage(`Performance pitch '${title}' was successfully submitted!`);
+  const handleToast = (message: string) => {
+    setToastMessage(message);
     setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const confirmWithdraw = async () => {
+    if (!withdrawModalReq) return;
+    setIsWithdrawing(true);
+    try {
+      await withdrawRequest(withdrawModalReq.id);
+      handleToast(`Pitch '${withdrawModalReq.title}' has been withdrawn.`);
+      setWithdrawModalReq(null);
+    } catch (err: any) {
+      handleToast("Failed to withdraw pitch.");
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  const handleResubmit = async (req: PerformanceRequest) => {
+    try {
+      await resubmitRequest(req.id);
+      handleToast(`Pitch '${req.title}' resubmitted to venue host for review.`);
+    } catch (err: any) {
+      handleToast("Failed to resubmit pitch.");
+    }
+  };
+
+  const handleDuplicate = (req: PerformanceRequest) => {
+    setPreselectedVenueId(req.venueId);
+    setIsModalOpen(true);
+    handleToast(`Pitch form pre-populated from '${req.title}'. Adjust terms and submit.`);
   };
 
   return (
@@ -102,59 +150,105 @@ export default function PerformerDashboardPage() {
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#191817] text-white hover:bg-[#C85A32] font-medium text-xs sm:text-sm transition-colors shadow-2xs"
             >
               <PlusIcon size={16} />
-              <span>Create Performance Request</span>
+              <span>Pitch New Stage</span>
             </button>
           </div>
         </div>
 
-        {/* Performer Metrics Bar (Explicitly Identified as Simulated) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 mt-6 border-t border-[#F4F2EC]">
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Upcoming Gigs
+        {/* Live Metrics Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-[#F4F2EC]">
+          <button
+            type="button"
+            onClick={() => document.getElementById("upcoming-gigs")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View confirmed performances"
+          >
+            <div className="text-xs font-mono text-[#8E897F] mb-1 group-hover:text-[#191817] flex items-center justify-between">
+              <span>Upcoming Gigs</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
             <div className="font-editorial text-2xl font-bold text-[#191817]">
-              {upcomingGigs.length} Shows
+              {upcomingGigs.length} Confirmed
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Active Pitches
+          </button>
+
+          <button
+            type="button"
+            onClick={() => document.getElementById("stage-requests")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View stage pitches & approvals"
+          >
+            <div className="text-xs font-mono text-[#8E897F] mb-1 group-hover:text-[#191817] flex items-center justify-between">
+              <span>Active Pitches</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
             <div className="font-editorial text-2xl font-bold text-[#C85A32]">
-              {performerRequests.filter((r) => r.status === "pending").length} Pending
+              {performerRequests.length} Pitches
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Simulated Earnings</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleToast(
+                `Simulated Net: ₹1,20,700 historical + ₹${Math.round(
+                  dynamicTicketsSold * 450 * 0.85
+                ).toLocaleString()} from ${dynamicTicketsSold} active ticket reservations (85% box office share).`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view earnings calculation breakdown"
+          >
+            <div className="text-xs font-mono text-[#8E897F] mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Simulated Net</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#8E897F] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
             <div className="font-editorial text-2xl font-bold text-[#191817]">
               ₹{simulatedEarnings.toLocaleString()}
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Pledged to Causes</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleToast(
+                `Cause Impact: ₹21,300 historical + ₹${Math.round(
+                  dynamicTicketsSold * 450 * 0.3
+                ).toLocaleString()} pledged across confirmed ticket reservations (30% cause contribution).`
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view cause pledges breakdown"
+          >
+            <div className="text-xs font-mono text-[#8E897F] mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Cause Impact</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#2D6638] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
             <div className="font-editorial text-2xl font-bold text-[#2D6638]">
               ₹{simulatedPledged.toLocaleString()}
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
-      {/* Section 1: Venue Requests & Status Tracking */}
-      <section className="space-y-4">
+      {/* In-Workspace AI Capabilities: Stage Matcher, Technical Rider Audit, Civic Guidance & Conflicts */}
+      <PerformerAiCopilot onSelectVenueForPitch={handleOpenPitch} />
+
+      {/* Section 1: Venue Requests & Lifecycle Management */}
+      <section id="stage-requests" className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
               Stage Requests & Approvals
             </h2>
             <p className="text-xs text-[#6B665E]">
-              Track the status of your technical riders submitted to stage hosts.
+              Track, alter, edit riders, withdraw, or resubmit performance pitches in real-time.
             </p>
           </div>
           <span className="text-xs font-mono text-[#8E897F]">
@@ -191,14 +285,22 @@ export default function PerformerDashboardPage() {
                       <UsersIcon size={12} />
                       ~{req.expectedAudienceSize} audience
                     </span>
+                    <span className="flex items-center gap-1 font-mono text-[#2D6638] hidden lg:flex">
+                      {req.currency} {req.budget.toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
                 {/* Status Indicator */}
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-center gap-2">
                   {req.status === "approved" && (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EDF5ED] text-[#2D6638] border border-[#CFE4CF]">
                       <CheckCircleIcon size={13} /> Approved by Host
+                    </span>
+                  )}
+                  {req.status === "returned" && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F5F0FF] text-[#6B21A8] border border-[#E9D5FF]">
+                      <ClockIcon size={13} /> Changes Requested
                     </span>
                   )}
                   {req.status === "pending" && (
@@ -211,19 +313,93 @@ export default function PerformerDashboardPage() {
                       <XCircleIcon size={13} /> Declined
                     </span>
                   )}
+                  {req.status === "withdrawn" && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F4F2EC] text-[#6B665E] border border-[#E8E5DC]">
+                      <XIcon size={13} /> Withdrawn
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Rider Note / Host Feedback */}
-              <div className="pt-3 text-xs text-[#5A554D] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <p className="line-clamp-1 italic">
+              <div className="pt-3 text-xs text-[#5A554D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="line-clamp-1 italic text-xs">
                   &ldquo;{req.description}&rdquo;
                 </p>
+
                 {req.reviewNote && (
-                  <span className="text-[11px] font-medium text-[#191817] bg-[#F4F2EC] px-2.5 py-1 rounded-lg shrink-0">
+                  <span
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg shrink-0 ${
+                      req.status === "returned"
+                        ? "bg-[#FAF5FF] text-[#6B21A8] border border-[#E9D5FF]"
+                        : "bg-[#F4F2EC] text-[#191817]"
+                    }`}
+                  >
                     Host: {req.reviewNote}
                   </span>
                 )}
+              </div>
+
+              {/* Action Buttons for Pitch Lifecycle */}
+              <div className="pt-3 mt-3 border-t border-[#F4F2EC] flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] font-mono text-[#8E897F]">
+                  {req.durationMinutes ? `${req.durationMinutes} min session` : "60 min session"} · {req.preferredLocation}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* View Details */}
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModalReq(req)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#191817] bg-[#F4F2EC] hover:bg-[#ECEAE1] transition-colors"
+                  >
+                    View Details & History
+                  </button>
+
+                  {/* Resubmit Pitch (if returned) */}
+                  {req.status === "returned" && (
+                    <button
+                      type="button"
+                      onClick={() => handleResubmit(req)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#6B21A8] hover:bg-[#7E22CE] shadow-2xs transition-colors"
+                    >
+                      Resubmit Pitch
+                    </button>
+                  )}
+
+                  {/* Edit Pitch (if pending, returned, or approved) */}
+                  {(req.status === "pending" || req.status === "returned" || req.status === "approved") && (
+                    <button
+                      type="button"
+                      onClick={() => setEditModalReq(req)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#191817] border border-[#E8E5DC] hover:border-[#C85A32] bg-white transition-colors"
+                    >
+                      Edit Pitch
+                    </button>
+                  )}
+
+                  {/* Withdraw Pitch (if pending or approved) */}
+                  {(req.status === "pending" || req.status === "approved") && (
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawModalReq(req)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      Withdraw
+                    </button>
+                  )}
+
+                  {/* Duplicate as New Pitch (if rejected or withdrawn) */}
+                  {(req.status === "rejected" || req.status === "withdrawn") && (
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicate(req)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#C85A32] border border-[#C85A32]/30 hover:bg-[#FBF0EB] transition-colors"
+                    >
+                      Duplicate Pitch →
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -231,7 +407,7 @@ export default function PerformerDashboardPage() {
       </section>
 
       {/* Section 2: Upcoming Confirmed Performances */}
-      <section className="space-y-4">
+      <section id="upcoming-gigs" className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
@@ -250,7 +426,9 @@ export default function PerformerDashboardPage() {
           {upcomingGigs.map((gig) => (
             <div
               key={gig.id}
-              className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs flex flex-col justify-between"
+              onClick={() => setSelectedGigModal(gig)}
+              className="bg-white rounded-2xl border border-[#E8E5DC] overflow-hidden shadow-2xs hover:border-[#C85A32]/60 hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer group"
+              title="Click to view full performance details & calendar export"
             >
               <div>
                 <div className="relative aspect-[16/8] bg-[#191817]">
@@ -313,8 +491,8 @@ export default function PerformerDashboardPage() {
         </div>
       </section>
 
-      {/* Section 3: Discover Available Stages (Shows all venues without truncation) */}
-      <section className="space-y-4">
+      {/* Section 3: Discover Available Stages */}
+      <section id="available-stages" className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
@@ -324,7 +502,7 @@ export default function PerformerDashboardPage() {
               Venues currently accepting performance requests and acoustic riders ({venues.length} spaces available).
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="status" size="sm">
             Venue Directory
           </Badge>
         </div>
@@ -333,13 +511,18 @@ export default function PerformerDashboardPage() {
           {venues.map((venue) => (
             <div
               key={venue.id}
-              className="bg-white p-4 rounded-2xl border border-[#E8E5DC] shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+              onClick={() => setSelectedVenueModal(venue)}
+              className="bg-white p-4 rounded-2xl border border-[#E8E5DC] shadow-2xs hover:shadow-xs hover:border-[#C85A32]/60 transition-all flex flex-col justify-between cursor-pointer group"
+              title="Click to view acoustic specifications & host policy"
             >
               <div>
                 <div className="relative aspect-[16/10] rounded-xl overflow-hidden mb-3 bg-[#191817]">
-                  <Image
+                  <VenueImage
                     src={venue.imageUrl}
                     alt={venue.name}
+                    venueId={venue.id}
+                    venueName={venue.name}
+                    venueType={venue.venueType}
                     fill
                     className="object-cover"
                   />
@@ -362,7 +545,10 @@ export default function PerformerDashboardPage() {
 
               <div className="pt-3 mt-3 border-t border-[#F4F2EC]">
                 <button
-                  onClick={() => handleOpenPitch(venue.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenPitch(venue.id);
+                  }}
                   type="button"
                   className="w-full py-1.5 text-xs font-medium rounded-lg bg-[#F4F2EC] hover:bg-[#C85A32] hover:text-white text-[#191817] transition-colors"
                 >
@@ -385,7 +571,7 @@ export default function PerformerDashboardPage() {
               Past showcases and social impact contributions (explicitly simulated demonstration figures).
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="outline" size="sm">
             Simulated Ledger
           </Badge>
         </div>
@@ -432,13 +618,100 @@ export default function PerformerDashboardPage() {
         </div>
       </section>
 
-      {/* Create Request Modal */}
+      {/* Create Pitch Modal */}
       <CreateRequestModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         preselectedVenueId={preselectedVenueId}
-        onSuccessToast={handleToast}
+        onSuccessToast={(title) => handleToast(`Performance pitch '${title}' was successfully submitted!`)}
       />
+
+      {/* Request Details & History Modal */}
+      {detailsModalReq && (
+        <RequestDetailsModal
+          request={detailsModalReq}
+          isOpen={true}
+          onClose={() => setDetailsModalReq(null)}
+          onEdit={() => {
+            setEditModalReq(detailsModalReq);
+            setDetailsModalReq(null);
+          }}
+          onWithdraw={() => {
+            setWithdrawModalReq(detailsModalReq);
+            setDetailsModalReq(null);
+          }}
+          onResubmit={() => {
+            handleResubmit(detailsModalReq);
+            setDetailsModalReq(null);
+          }}
+          onDuplicate={() => {
+            handleDuplicate(detailsModalReq);
+            setDetailsModalReq(null);
+          }}
+          viewerRole="performer"
+        />
+      )}
+
+      {/* Edit Request Modal */}
+      {editModalReq && (
+        <EditRequestModal
+          request={editModalReq}
+          isOpen={true}
+          onClose={() => setEditModalReq(null)}
+          onSaved={(title) => handleToast(`Pitch '${title}' alterations saved successfully.`)}
+        />
+      )}
+
+      {/* Withdraw Confirmation Modal */}
+      {withdrawModalReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-[#E8E5DC] shadow-2xl max-w-md w-full p-6 text-[#191817]">
+            <h3 className="font-editorial text-xl font-bold mb-2">
+              Withdraw Performance Pitch?
+            </h3>
+            <p className="text-xs text-[#6B665E] leading-relaxed mb-6">
+              Are you sure you want to withdraw <strong>&lsquo;{withdrawModalReq.title}&rsquo;</strong>? The venue host will be notified, and this pitch will no longer be considered for scheduling. You can duplicate it as a new pitch later if needed.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setWithdrawModalReq(null)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-[#6B665E] hover:text-[#191817]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmWithdraw}
+                disabled={isWithdrawing}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                {isWithdrawing ? "Withdrawing..." : "Confirm Withdrawal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Venue Details Modal */}
+      {selectedVenueModal && (
+        <VenueDetailsModal
+          venue={selectedVenueModal}
+          isOpen={true}
+          onClose={() => setSelectedVenueModal(null)}
+          onPitch={(vId) => handleOpenPitch(vId)}
+          viewerRole="performer"
+        />
+      )}
+
+      {/* Gig Event Details Modal */}
+      {selectedGigModal && (
+        <EventDetailsModal
+          event={selectedGigModal}
+          isOpen={true}
+          onClose={() => setSelectedGigModal(null)}
+          isAlreadyBooked={true}
+        />
+      )}
     </div>
   );
 }

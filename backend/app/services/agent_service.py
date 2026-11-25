@@ -1,19 +1,24 @@
 """Service orchestrating Google ADK Multi-Agent execution with full observability and session continuity."""
+import os
 import time
 import uuid
 import datetime
 import re
 import asyncio
 import random
+import logging
+from contextlib import aclosing
 from typing import List, Dict, Any, Optional, Tuple
 
 from google.adk import Runner, Event
 from google.adk.sessions import InMemorySessionService, Session
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.genai import types
 
 from app.config import settings
 from app.agents.orchestrator import create_stage_orchestrator
-from app.schemas.ai import AgentExecutionEvent, AiCommandResponse
+from app.agents.stage_match.agent import build_venue_mcp_toolset
+from app.schemas.ai import AgentExecutionEvent, AiCommandResponse, PerformanceMetrics
 
 # Direct tool imports for deterministic execution & testing
 from app.agents.stage_match.tools import (
@@ -37,8 +42,11 @@ from app.agents.impact_flow.tools import (
 )
 
 MAX_LIVE_ATTEMPTS = 3
-INITIAL_RETRY_DELAY = 0.5  # seconds
+INITIAL_RETRY_DELAY = 1.0  # seconds
 MAX_RETRY_DELAY = 2.5      # seconds
+GEMINI_REQUEST_TIMEOUT_MS = 20_000  # 20.0s bounded provider HTTP timeout
+OVERALL_EXECUTION_BUDGET_SECONDS = float(os.getenv("STAGE_AI_EXECUTION_BUDGET_SECONDS", "75.0"))
+MIN_RETRY_BUDGET_SECONDS = 20.0  # Minimum budget required to start another attempt (one model request)
 
 # Registry of tools that cause non-idempotent state mutations
 MUTATING_TOOLS: set[str] = {
@@ -52,6 +60,51 @@ MUTATING_TOOLS: set[str] = {
     "send_notification",
 }
 
+def sanitize_provider_message(msg: Optional[str]) -> str:
+    """Sanitize exception messages to prevent leaking API keys, credentials, or secrets."""
+    if not msg:
+        return ""
+    cleaned = str(msg)
+    # Redact Google API keys (AIza...)
+    cleaned = re.sub(r'AIza[0-9A-Za-z-_]{35}', '[REDACTED_API_KEY]', cleaned)
+    # Redact generic api_key / key parameters
+    cleaned = re.sub(r'(?:api[_-]?key|key)[=:\s]+[A-Za-z0-9_-]{12,}', 'key=[REDACTED]', cleaned, flags=re.IGNORECASE)
+    # Redact Authorization headers
+    cleaned = re.sub(r'Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*', 'Bearer [REDACTED]', cleaned, flags=re.IGNORECASE)
+    # Redact secret queries in URLs
+    cleaned = re.sub(r'([?&]key=)[^&]+', r'\1[REDACTED]', cleaned)
+    # Collapse whitespace
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:400]
+
+class ErrorClassification:
+    """Structured classification result holding retryability, category, status code, and sanitized message."""
+    def __init__(
+        self,
+        is_retryable: bool,
+        category: str,
+        status_code: Optional[int] = None,
+        provider_message: Optional[str] = None,
+    ):
+        self.is_retryable = is_retryable
+        self.category = category
+        self.status_code = status_code
+        self.provider_message = provider_message
+
+    def __iter__(self):
+        """Allow seamless unpacking as (is_retryable, category) for complete backwards compatibility."""
+        return iter((self.is_retryable, self.category))
+
+    def __getitem__(self, index):
+        return (self.is_retryable, self.category)[index]
+
+    def __repr__(self):
+        return (
+            f"ErrorClassification(is_retryable={self.is_retryable}, "
+            f"category='{self.category}', status_code={self.status_code}, "
+            f"provider_message='{self.provider_message}')"
+        )
+
 def is_mutating_tool(tool_name: str) -> bool:
     """Determine if a tool performs non-idempotent state mutations."""
     name_clean = (tool_name or "").lower().strip()
@@ -59,6 +112,23 @@ def is_mutating_tool(tool_name: str) -> bool:
         name_clean.startswith(prefix)
         for prefix in ["create_", "update_", "delete_", "submit_", "book_", "record_", "send_"]
     )
+
+def extract_transfer_agent_name(call_or_args: Any) -> Optional[str]:
+    """Extract destination specialist agent name from transfer_to_agent arguments."""
+    if not call_or_args:
+        return None
+    args = getattr(call_or_args, "args", call_or_args)
+    if isinstance(args, dict):
+        return args.get("agent_name")
+    if hasattr(args, "get"):
+        return args.get("agent_name")
+    if hasattr(args, "agent_name"):
+        return getattr(args, "agent_name")
+    try:
+        d = dict(args)
+        return d.get("agent_name")
+    except Exception:
+        return None
 
 def is_temporary_rate_limit(exc: Exception) -> Tuple[bool, Optional[float]]:
     """Determine if an error represents temporary rate-limit throttling (HTTP 429).
@@ -124,80 +194,381 @@ def is_temporary_rate_limit(exc: Exception) -> Tuple[bool, Optional[float]]:
 
     return False, None
 
-def classify_execution_error(exc: Exception) -> Tuple[bool, str]:
-    """Sanitize and classify an exception to determine retry eligibility.
+def classify_execution_error(exc: Exception) -> ErrorClassification:
+    """Sanitize and classify an exception to determine retry eligibility and capture provider telemetry.
 
     Returns:
-        (is_retryable: bool, sanitized_category: str)
+        ErrorClassification with (is_retryable, category, status_code, provider_message)
     """
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     status = getattr(exc, "status", None)
     err_str = str(exc).lower()
     exc_type = type(exc).__name__
 
-    # 1. Check HTTP 429 specifically
-    if code == 429 or "429" in err_str:
+    # Extract raw message from Google GenAI details or exception attributes
+    raw_message = None
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict):
+        err_dict = details.get("error", details)
+        if isinstance(err_dict, dict) and "message" in err_dict:
+            raw_message = str(err_dict["message"])
+    if not raw_message:
+        msg_attr = getattr(exc, "message", None)
+        if msg_attr and isinstance(msg_attr, str):
+            raw_message = msg_attr
+        else:
+            raw_message = str(exc)
+
+    provider_msg = sanitize_provider_message(raw_message)
+
+    # Determine status code if present
+    status_code: Optional[int] = None
+    if isinstance(code, int):
+        status_code = code
+    elif "503" in err_str or status == "UNAVAILABLE":
+        status_code = 503
+    elif "429" in err_str or status == "RESOURCE_EXHAUSTED":
+        status_code = 429
+    elif "404" in err_str or status == "NOT_FOUND":
+        status_code = 404
+    elif "401" in err_str or status == "UNAUTHENTICATED":
+        status_code = 401
+    elif "403" in err_str or status == "PERMISSION_DENIED":
+        status_code = 403
+    elif "400" in err_str or status == "INVALID_ARGUMENT":
+        status_code = 400
+    elif "502" in err_str:
+        status_code = 502
+    elif "504" in err_str:
+        status_code = 504
+    elif "500" in err_str or status == "INTERNAL":
+        status_code = 500
+
+    # 1. Check Network timeouts & Bounded Provider timeouts first
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or any(
+        k in err_str for k in ["timeout", "timed out", "connecttimeout", "readtimeout", "servertimeout"]
+    ):
+        return ErrorClassification(
+            is_retryable=True,
+            category="Provider Request Timeout",
+            status_code=504,
+            provider_message=provider_msg or "Provider request exceeded bounded timeout (20.0s)",
+        )
+
+    # 2. Check HTTP 429 specifically
+    if status_code == 429 or "429" in err_str:
         is_temp, _ = is_temporary_rate_limit(exc)
         if is_temp:
-            return True, "Temporary Rate Limit (HTTP 429)"
+            return ErrorClassification(
+                is_retryable=True,
+                category="Temporary Rate Limit (HTTP 429)",
+                status_code=429,
+                provider_message=provider_msg,
+            )
         else:
-            return False, "Permanent Quota Exhaustion (ResourceExhausted)"
+            return ErrorClassification(
+                is_retryable=False,
+                category="Permanent Quota Exhaustion (ResourceExhausted)",
+                status_code=429,
+                provider_message=provider_msg,
+            )
 
-    # 2. Check 401 / 403 Authentication & Permission
-    if code in [401, 403] or status in ["UNAUTHENTICATED", "PERMISSION_DENIED"] or any(
+    # 3. Check 401 / 403 Authentication & Permission
+    if status_code in [401, 403] or status in ["UNAUTHENTICATED", "PERMISSION_DENIED"] or any(
         k in err_str for k in ["401", "unauthorized", "api_key", "api key", "forbidden", "403", "permission_denied"]
     ):
-        return False, "Authentication / Permission Error (HTTP 401/403)"
+        return ErrorClassification(
+            is_retryable=False,
+            category="Authentication / Permission Error (HTTP 401/403)",
+            status_code=status_code or 401,
+            provider_message=provider_msg,
+        )
 
-    # 3. Check 404 Model Not Found
-    if code == 404 or status == "NOT_FOUND" or any(
+    # 4. Check 404 Model Not Found
+    if status_code == 404 or status == "NOT_FOUND" or any(
         k in err_str for k in ["404", "not found", "model not found", "is not found"]
     ):
-        return False, "Model Not Found / Invalid Endpoint (HTTP 404)"
+        return ErrorClassification(
+            is_retryable=False,
+            category="Model Not Found / Invalid Endpoint (HTTP 404)",
+            status_code=404,
+            provider_message=provider_msg,
+        )
 
-    # 4. Check 400 Bad Request
-    if code == 400 or status == "INVALID_ARGUMENT" or any(
+    # 5. Check 400 Bad Request
+    if status_code == 400 or status == "INVALID_ARGUMENT" or any(
         k in err_str for k in ["400", "invalid argument", "bad request", "tool configuration"]
     ):
-        return False, "Invalid Request / Tool Configuration (HTTP 400)"
+        return ErrorClassification(
+            is_retryable=False,
+            category="Invalid Request / Tool Configuration (HTTP 400)",
+            status_code=400,
+            provider_message=provider_msg,
+        )
 
-    # 5. Check other quota exhaustion mentions
+    # 6. Check other quota exhaustion mentions
     if "quota" in err_str and "exhausted" in err_str:
         is_temp, _ = is_temporary_rate_limit(exc)
         if is_temp:
-            return True, "Temporary Rate Limit (HTTP 429)"
-        return False, "Permanent Quota Exhaustion (ResourceExhausted)"
+            return ErrorClassification(
+                is_retryable=True,
+                category="Temporary Rate Limit (HTTP 429)",
+                status_code=429,
+                provider_message=provider_msg,
+            )
+        return ErrorClassification(
+            is_retryable=False,
+            category="Permanent Quota Exhaustion (ResourceExhausted)",
+            status_code=429,
+            provider_message=provider_msg,
+        )
 
-    # 6. Retryable HTTP 503 / 502 / 504 / 500
-    if code == 503 or status == "UNAVAILABLE" or any(k in err_str for k in ["503", "service unavailable", "overloaded", "model is overloaded"]):
-        return True, "Service Unavailable (HTTP 503)"
-    if code == 502 or any(k in err_str for k in ["502", "bad gateway"]):
-        return True, "Bad Gateway (HTTP 502)"
-    if code == 504 or any(k in err_str for k in ["504", "gateway timeout"]):
-        return True, "Gateway Timeout (HTTP 504)"
-    if code == 500 or status == "INTERNAL" or any(k in err_str for k in ["500", "internal server error"]):
-        return True, "Internal Server Error (HTTP 500)"
+    # 7. Retryable HTTP 503 / 502 / 504 / 500
+    if status_code == 503 or status == "UNAVAILABLE" or any(
+        k in err_str for k in ["503", "service unavailable", "overloaded", "model is overloaded", "high demand"]
+    ):
+        return ErrorClassification(
+            is_retryable=True,
+            category="Service Unavailable (HTTP 503)",
+            status_code=503,
+            provider_message=provider_msg,
+        )
+    if status_code == 502 or any(k in err_str for k in ["502", "bad gateway"]):
+        return ErrorClassification(
+            is_retryable=True,
+            category="Bad Gateway (HTTP 502)",
+            status_code=502,
+            provider_message=provider_msg,
+        )
+    if status_code == 504 or any(k in err_str for k in ["504", "gateway timeout"]):
+        return ErrorClassification(
+            is_retryable=True,
+            category="Gateway Timeout (HTTP 504)",
+            status_code=504,
+            provider_message=provider_msg,
+        )
+    if status_code == 500 or status == "INTERNAL" or any(k in err_str for k in ["500", "internal server error"]):
+        return ErrorClassification(
+            is_retryable=True,
+            category="Internal Server Error (HTTP 500)",
+            status_code=500,
+            provider_message=provider_msg,
+        )
 
-    # 7. Network timeouts & Connection failures
-    if any(k in err_str for k in ["timeout", "timed out", "connecttimeout", "readtimeout"]):
-        return True, "Network Timeout"
+    # 8. Connection failures
     if any(k in err_str for k in ["connecterror", "connection refused", "connection reset", "broken pipe", "nodename nor servname"]):
-        return True, "Connection Transport Failure"
+        return ErrorClassification(
+            is_retryable=True,
+            category="Connection Transport Failure",
+            status_code=None,
+            provider_message=provider_msg,
+        )
 
     # Default to non-retryable for safety
-    return False, f"Non-Retryable System Error ({exc_type})"
+    return ErrorClassification(
+        is_retryable=False,
+        category=f"Non-Retryable System Error ({exc_type})",
+        status_code=status_code,
+        provider_message=provider_msg,
+    )
+
+logger = logging.getLogger(__name__)
+
 
 class StageAgentService:
     """Singleton service managing the STAGE multi-agent system."""
 
     def __init__(self):
         self.session_service = InMemorySessionService()
-        self.orchestrator = create_stage_orchestrator()
+        self.mcp_toolset: Optional[McpToolset] = None
+        self._is_initialized: bool = False
+        self._init_lock: Optional[asyncio.Lock] = None
+
+        # Base orchestrator & runner without MCP for immediate import/test safety (no subprocess at import)
+        self.orchestrator = create_stage_orchestrator(mcp_toolset=None)
         self.runner = Runner(
             agent=self.orchestrator,
             session_service=self.session_service,
             app_name="stage_platform",
         )
+
+        # Performance and latency instrumentation tracking buffers
+        self._latency_history: List[float] = []
+        self._stage_timings: Dict[str, List[float]] = {
+            "intent_classification": [],
+            "agent_init": [],
+            "specialist_tools": [],
+            "rag_retrieval": [],
+            "database": [],
+            "total": [],
+        }
+
+    def record_latency(self, total_ms: float, stage_dict: Dict[str, float]) -> None:
+        """Store latency measurement in circular window of last 200 requests."""
+        self._latency_history.append(total_ms)
+        if len(self._latency_history) > 200:
+            self._latency_history.pop(0)
+        for k, v in stage_dict.items():
+            if k in self._stage_timings:
+                self._stage_timings[k].append(v)
+                if len(self._stage_timings[k]) > 200:
+                    self._stage_timings[k].pop(0)
+
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Compute p50, p95, mean latency and breakdown stats across recorded requests."""
+        latencies = sorted(self._latency_history)
+        n = len(latencies)
+        if n == 0:
+            return {
+                "sample_count": 0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+                "mean_latency_ms": 0.0,
+                "min_latency_ms": 0.0,
+                "max_latency_ms": 0.0,
+                "breakdown_averages_ms": {},
+            }
+        p50 = latencies[int(n * 0.50)]
+        p95 = latencies[min(int(n * 0.95), n - 1)]
+        mean_lat = sum(latencies) / n
+        breakdowns = {}
+        for stage, vals in self._stage_timings.items():
+            breakdowns[stage] = round(sum(vals) / len(vals), 2) if vals else 0.0
+        return {
+            "sample_count": n,
+            "p50_latency_ms": round(p50, 2),
+            "p95_latency_ms": round(p95, 2),
+            "mean_latency_ms": round(mean_lat, 2),
+            "min_latency_ms": round(min(latencies), 2),
+            "max_latency_ms": round(max(latencies), 2),
+            "breakdown_averages_ms": breakdowns,
+        }
+
+    async def stream_command(
+        self,
+        user_id: str,
+        message: str,
+        session_id: Optional[str] = None,
+        force_mock: bool = False,
+    ):
+        """Yield progressive Server-Sent Events (SSE) representing agent execution steps and text chunks."""
+        # Step 1: Immediate acknowledgement
+        yield {
+            "event": "acknowledgement",
+            "data": {
+                "status": "received",
+                "user_id": user_id,
+                "timestamp": time.time(),
+                "message": "STAGE Orchestrator received command. Analyzing intent...",
+            }
+        }
+        await asyncio.sleep(0.02)
+
+        # Step 2: Execute command with full multi-agent orchestration
+        res = await self.execute_command(
+            user_id=user_id,
+            message=message,
+            session_id=session_id,
+            force_mock=force_mock,
+        )
+
+        # Step 3: Stream agent activity and tool events
+        for ev in res.agent_execution_events:
+            yield {
+                "event": "agent_activity",
+                "data": ev.model_dump(),
+            }
+            await asyncio.sleep(0.01)
+
+        # Step 4: Stream synthesized text in paragraphs
+        paragraphs = [p for p in res.final_response.split("\n\n") if p.strip()]
+        for p in paragraphs:
+            yield {
+                "event": "text_chunk",
+                "data": {"chunk": p + "\n\n"},
+            }
+            await asyncio.sleep(0.02)
+
+        # Step 5: Final completion with telemetry and performance metrics
+        yield {
+            "event": "completed",
+            "data": res.model_dump(),
+        }
+
+    @property
+    def is_mcp_active(self) -> bool:
+        """Whether the MCP toolset is actively initialized and wired into the agent runner."""
+        return self._is_initialized and self.mcp_toolset is not None
+
+    async def initialize(self) -> None:
+        """Explicit async lifecycle initialization.
+
+        Creates the MCP toolset before constructing the orchestrator and Runner,
+        ensures the MCP toolset is available to StageMatch during orchestrator construction,
+        verifies that required tools are exposed, and ensures initialization occurs once.
+        """
+        if self._is_initialized:
+            return
+
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+
+        async with self._init_lock:
+            if self._is_initialized:
+                return
+
+            toolset: Optional[McpToolset] = None
+            try:
+                # 1. Create the MCP toolset before constructing the orchestrator and Runner
+                toolset = build_venue_mcp_toolset()
+
+                # 2. Verify server responsiveness and tool availability
+                discovered_tools = await toolset.get_tools()
+                discovered_names = [t.name for t in discovered_tools]
+                required = {"search_stages", "get_stage_details"}
+                if not required.issubset(set(discovered_names)):
+                    raise RuntimeError(
+                        f"MCP venue server failed to expose required tools {required}. Found: {discovered_names}"
+                    )
+
+                # 3. Construct orchestrator and Runner with the verified MCP toolset
+                self.mcp_toolset = toolset
+                self.orchestrator = create_stage_orchestrator(mcp_toolset=self.mcp_toolset)
+                self.runner = Runner(
+                    agent=self.orchestrator,
+                    session_service=self.session_service,
+                    app_name="stage_platform",
+                )
+                self._is_initialized = True
+            except Exception as e:
+                if toolset is not None:
+                    try:
+                        await toolset.close()
+                    except Exception:
+                        pass
+                self.mcp_toolset = None
+                self._is_initialized = False
+                raise RuntimeError(f"Failed to initialize StageAgentService MCP integration: {e}") from e
+
+    async def shutdown(self) -> None:
+        """Explicit async lifecycle shutdown.
+
+        Closes the active MCP toolset and releases subprocess resources.
+        """
+        if self.mcp_toolset is not None:
+            try:
+                await self.mcp_toolset.close()
+            except Exception as e:
+                logger.warning("Error during MCP toolset shutdown: %s", e)
+            finally:
+                self.mcp_toolset = None
+                self._is_initialized = False
+                self.orchestrator = create_stage_orchestrator(mcp_toolset=None)
+                self.runner = Runner(
+                    agent=self.orchestrator,
+                    session_service=self.session_service,
+                    app_name="stage_platform",
+                )
 
     async def get_or_create_session(self, user_id: str, session_id: Optional[str] = None) -> Session:
         """Retrieve existing conversational session or create a new one."""
@@ -239,6 +610,10 @@ class StageAgentService:
         error_reason: str,
         attempt_text: str = "",
         is_mutating: bool = False,
+        provider_status: Optional[int] = None,
+        provider_message: Optional[str] = None,
+        attempt: Optional[int] = None,
+        duration_ms: Optional[float] = None,
     ) -> AiCommandResponse:
         """Construct a structured partial failure response preserving all live telemetry."""
         telemetry_events.append(
@@ -247,6 +622,11 @@ class StageAgentService:
                 event_type="partial_execution_failure",
                 message=f"Live multi-agent execution was interrupted after tool execution ({', '.join(executed_tools)}). Automatic retry and offline fallback were suppressed for safety.",
                 timestamp=time.time(),
+                provider_status=provider_status,
+                provider_message=provider_message,
+                attempt=attempt,
+                duration_ms=duration_ms,
+                has_mutating_tools=is_mutating,
             )
         )
 
@@ -311,6 +691,8 @@ class StageAgentService:
         )
 
         last_error_reason = "Unknown live execution error"
+        last_provider_status: Optional[int] = None
+        last_provider_message: Optional[str] = None
         execution_succeeded = False
         final_response = ""
         selected_agents: set[str] = set()
@@ -318,8 +700,34 @@ class StageAgentService:
 
         canonical_session = session
         canonical_events_count = len(canonical_session.events)
+        workflow_start_monotonic = time.monotonic()
+        workflow_deadline = workflow_start_monotonic + OVERALL_EXECUTION_BUDGET_SECONDS
 
+        last_attempt_number: Optional[int] = None
         for attempt in range(1, MAX_LIVE_ATTEMPTS + 1):
+            now_mono = time.monotonic()
+            remaining_budget = workflow_deadline - now_mono
+            elapsed_total = now_mono - workflow_start_monotonic
+
+            # Verify overall live execution budget before starting attempt
+            if remaining_budget <= 0 or (attempt > 1 and remaining_budget < MIN_RETRY_BUDGET_SECONDS):
+                telemetry_events.append(
+                    AgentExecutionEvent(
+                        agent_name="stage_orchestrator",
+                        event_type="deadline_exhausted",
+                        message=f"Live retry aborted on attempt {attempt}: insufficient remaining budget ({round(remaining_budget, 1)}s remaining of {OVERALL_EXECUTION_BUDGET_SECONDS}s budget). Exiting retry loop early.",
+                        timestamp=time.time(),
+                        attempt=attempt,
+                        duration_ms=round(elapsed_total * 1000.0, 2),
+                        has_mutating_tools=False,
+                    )
+                )
+                last_error_reason = f"Execution Deadline Exhausted ({round(elapsed_total, 1)}s elapsed of {OVERALL_EXECUTION_BUDGET_SECONDS}s budget)"
+                break
+
+            last_attempt_number = attempt
+            attempt_start_monotonic = time.monotonic()
+            attempt_timeout = max(0.1, workflow_deadline - attempt_start_monotonic)
             attempt_events: List[AgentExecutionEvent] = []
             attempt_text_parts: List[str] = []
             attempt_agents: set[str] = set()
@@ -348,73 +756,48 @@ class StageAgentService:
                         event_type="retry_started",
                         message=f"Attempt {attempt}/{MAX_LIVE_ATTEMPTS}: Restarting live request after transient failure ({last_error_reason}).",
                         timestamp=time.time(),
+                        attempt=attempt,
+                        provider_status=last_provider_status,
                     )
                 )
 
+            timeout_ctx = None
             try:
-                async for event in self.runner.run_async(
-                    user_id=user_id,
-                    session_id=attempt_session.id,
-                    new_message=user_content,
-                ):
-                    agent_name = event.author or "stage_orchestrator"
-                    if agent_name != "stage_orchestrator":
-                        attempt_agents.add(agent_name)
-                        has_emitted_specialist_events = True
-                        # Note: Specialist handoff does NOT set has_executed_tools
-
-                    # Check function calls using ADK helper if available
-                    func_calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
-                    for call in func_calls:
-                        tool_name = call.name
-                        has_executed_tools = True
-                        executed_tools.append(tool_name)
-                        if is_mutating_tool(tool_name):
-                            has_executed_mutating_tools = True
-                            executed_mutating_tools.append(tool_name)
-                        attempt_events.append(
-                            AgentExecutionEvent(
-                                agent_name=agent_name,
-                                event_type="tool_call",
-                                tool_name=tool_name,
-                                tool_input=dict(call.args) if getattr(call, "args", None) else {},
-                                timestamp=time.time(),
-                            )
+                async with asyncio.timeout(attempt_timeout) as timeout_ctx:
+                    async with aclosing(
+                        self.runner.run_async(
+                            user_id=user_id,
+                            session_id=attempt_session.id,
+                            new_message=user_content,
                         )
+                    ) as agen:
+                        async for event in agen:
+                            agent_name = event.author or "stage_orchestrator"
+                            if agent_name != "stage_orchestrator":
+                                attempt_agents.add(agent_name)
+                                has_emitted_specialist_events = True
+                                # Note: Specialist handoff does NOT set has_executed_tools
 
-                    # Check function responses using ADK helper if available
-                    func_responses = event.get_function_responses() if hasattr(event, "get_function_responses") else []
-                    for resp in func_responses:
-                        tool_name = resp.name
-                        has_executed_tools = True
-                        if is_mutating_tool(tool_name):
-                            has_executed_mutating_tools = True
-                        attempt_events.append(
-                            AgentExecutionEvent(
-                                agent_name=agent_name,
-                                event_type="tool_result",
-                                tool_name=tool_name,
-                                tool_output=resp.response if hasattr(resp, "response") else resp,
-                                timestamp=time.time(),
-                            )
-                        )
-
-                    # Process content parts if not already captured by helpers
-                    if event.content and event.content.parts:
-                        for part in event.content.parts:
-                            if part.text:
-                                attempt_text_parts.append(part.text)
-                                attempt_events.append(
-                                    AgentExecutionEvent(
-                                        agent_name=agent_name,
-                                        event_type="agent_response",
-                                        message=part.text[:300] + ("..." if len(part.text) > 300 else ""),
-                                        timestamp=time.time(),
-                                    )
-                                )
-                            elif part.function_call and not func_calls:
-                                call = part.function_call
+                            # Check function calls using ADK helper if available
+                            func_calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
+                            for call in func_calls:
                                 tool_name = call.name
+                                if tool_name in ["transfer_to_agent", "_transfer_to_agent"]:
+                                    target_agent = extract_transfer_agent_name(call)
+                                    if target_agent and target_agent != "stage_orchestrator":
+                                        attempt_agents.add(target_agent)
+                                        has_emitted_specialist_events = True
+                                    attempt_events.append(
+                                        AgentExecutionEvent(
+                                            agent_name=agent_name,
+                                            event_type="specialist_handoff",
+                                            message=f"Orchestrator transferred execution to specialist agent: '{target_agent or 'unknown'}'.",
+                                            timestamp=time.time(),
+                                            attempt=attempt,
+                                        )
+                                    )
+                                    continue
+
                                 has_executed_tools = True
                                 executed_tools.append(tool_name)
                                 if is_mutating_tool(tool_name):
@@ -427,11 +810,17 @@ class StageAgentService:
                                         tool_name=tool_name,
                                         tool_input=dict(call.args) if getattr(call, "args", None) else {},
                                         timestamp=time.time(),
+                                        attempt=attempt,
                                     )
                                 )
-                            elif part.function_response and not func_responses:
-                                resp = part.function_response
+
+                            # Check function responses using ADK helper if available
+                            func_responses = event.get_function_responses() if hasattr(event, "get_function_responses") else []
+                            for resp in func_responses:
                                 tool_name = resp.name
+                                if tool_name in ["transfer_to_agent", "_transfer_to_agent"]:
+                                    continue
+
                                 has_executed_tools = True
                                 if is_mutating_tool(tool_name):
                                     has_executed_mutating_tools = True
@@ -442,12 +831,94 @@ class StageAgentService:
                                         tool_name=tool_name,
                                         tool_output=resp.response if hasattr(resp, "response") else resp,
                                         timestamp=time.time(),
+                                        attempt=attempt,
                                     )
                                 )
+
+                            # Process content parts if not already captured by helpers
+                            if event.content and event.content.parts:
+                                for part in event.content.parts:
+                                    if part.text:
+                                        attempt_text_parts.append(part.text)
+                                        attempt_events.append(
+                                            AgentExecutionEvent(
+                                                agent_name=agent_name,
+                                                event_type="agent_response",
+                                                message=part.text[:300] + ("..." if len(part.text) > 300 else ""),
+                                                timestamp=time.time(),
+                                                attempt=attempt,
+                                            )
+                                        )
+                                    elif part.function_call and not func_calls:
+                                        call = part.function_call
+                                        tool_name = call.name
+                                        if tool_name in ["transfer_to_agent", "_transfer_to_agent"]:
+                                            target_agent = extract_transfer_agent_name(call)
+                                            if target_agent and target_agent != "stage_orchestrator":
+                                                attempt_agents.add(target_agent)
+                                                has_emitted_specialist_events = True
+                                            attempt_events.append(
+                                                AgentExecutionEvent(
+                                                    agent_name=agent_name,
+                                                    event_type="specialist_handoff",
+                                                    message=f"Orchestrator transferred execution to specialist agent: '{target_agent or 'unknown'}'.",
+                                                    timestamp=time.time(),
+                                                    attempt=attempt,
+                                                )
+                                            )
+                                            continue
+
+                                        has_executed_tools = True
+                                        executed_tools.append(tool_name)
+                                        if is_mutating_tool(tool_name):
+                                            has_executed_mutating_tools = True
+                                            executed_mutating_tools.append(tool_name)
+                                        attempt_events.append(
+                                            AgentExecutionEvent(
+                                                agent_name=agent_name,
+                                                event_type="tool_call",
+                                                tool_name=tool_name,
+                                                tool_input=dict(call.args) if getattr(call, "args", None) else {},
+                                                timestamp=time.time(),
+                                                attempt=attempt,
+                                            )
+                                        )
+                                    elif part.function_response and not func_responses:
+                                        resp = part.function_response
+                                        tool_name = resp.name
+                                        if tool_name in ["transfer_to_agent", "_transfer_to_agent"]:
+                                            continue
+
+                                        has_executed_tools = True
+                                        if is_mutating_tool(tool_name):
+                                            has_executed_mutating_tools = True
+                                        attempt_events.append(
+                                            AgentExecutionEvent(
+                                                agent_name=agent_name,
+                                                event_type="tool_result",
+                                                tool_name=tool_name,
+                                                tool_output=resp.response if hasattr(resp, "response") else resp,
+                                                timestamp=time.time(),
+                                                attempt=attempt,
+                                            )
+                                        )
 
                 final_response = "".join(attempt_text_parts).strip()
                 if not final_response:
                     final_response = "The STAGE specialist agents have completed analyzing your request."
+
+                attempt_duration_ms = round((time.monotonic() - attempt_start_monotonic) * 1000.0, 2)
+                attempt_events.append(
+                    AgentExecutionEvent(
+                        agent_name="stage_orchestrator",
+                        event_type="live_execution_success",
+                        message=f"Live Gemini execution succeeded on attempt {attempt}/{MAX_LIVE_ATTEMPTS}.",
+                        timestamp=time.time(),
+                        attempt=attempt,
+                        duration_ms=attempt_duration_ms,
+                        has_mutating_tools=has_executed_mutating_tools,
+                    )
+                )
 
                 # Success: Commit attempt events to canonical session
                 s_att = await self.session_service.get_session(
@@ -462,8 +933,108 @@ class StageAgentService:
                 execution_succeeded = True
                 break
 
-            except Exception as exc:
-                is_retryable, last_error_reason = classify_execution_error(exc)
+            except asyncio.CancelledError:
+                # External task cancellation (e.g. client disconnect, server cancellation)
+                # Must propagate immediately without fallback or session commit
+                raise
+            except (TimeoutError, Exception) as exc:
+                now_mono = time.monotonic()
+                attempt_duration_ms = round((now_mono - attempt_start_monotonic) * 1000.0, 2)
+                elapsed_total = now_mono - workflow_start_monotonic
+                is_deadline_timeout = (timeout_ctx is not None and timeout_ctx.expired()) or (
+                    isinstance(exc, TimeoutError) and (workflow_deadline - now_mono <= 0.05)
+                )
+
+                if is_deadline_timeout:
+                    # In-flight execution was interrupted by the overall workflow deadline
+                    telemetry_events.append(
+                        AgentExecutionEvent(
+                            agent_name="stage_orchestrator",
+                            event_type="deadline_exhausted",
+                            message=f"Live execution deadline exhausted during active attempt {attempt} ({round(elapsed_total, 1)}s elapsed of {OVERALL_EXECUTION_BUDGET_SECONDS}s budget). Interrupted in-flight execution.",
+                            timestamp=time.time(),
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                            has_mutating_tools=has_executed_mutating_tools,
+                        )
+                    )
+
+                    # Safety Check 1: Mutating tool execution
+                    if has_executed_mutating_tools:
+                        telemetry_events.append(
+                            AgentExecutionEvent(
+                                agent_name="stage_orchestrator",
+                                event_type="retry_aborted_mutating_tool",
+                                message=f"Live execution halted after mutating tool execution ({', '.join(executed_mutating_tools)}). Automatic retry and fallback are disabled to prevent duplicate side effects.",
+                                timestamp=time.time(),
+                                provider_status=504,
+                                provider_message=f"Execution deadline ({OVERALL_EXECUTION_BUDGET_SECONDS}s) expired after mutating tools",
+                                attempt=attempt,
+                                duration_ms=attempt_duration_ms,
+                                has_mutating_tools=True,
+                            )
+                        )
+                        return self._build_partial_execution_response(
+                            session_id=canonical_session.id,
+                            user_id=user_id,
+                            telemetry_events=telemetry_events + attempt_events,
+                            selected_agents=list(attempt_agents),
+                            executed_tools=executed_tools,
+                            error_reason=f"Execution Deadline Exhausted ({round(elapsed_total, 1)}s elapsed)",
+                            attempt_text="".join(attempt_text_parts),
+                            is_mutating=True,
+                            provider_status=504,
+                            provider_message="Execution deadline expired after mutating tools",
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                        )
+
+                    # Safety Check 2: Read-only tool execution
+                    if has_executed_tools:
+                        telemetry_events.append(
+                            AgentExecutionEvent(
+                                agent_name="stage_orchestrator",
+                                event_type="retry_aborted_partial_execution",
+                                message=f"Live retry aborted on attempt {attempt}: partial execution already executed tools ({', '.join(executed_tools)}). Halting to prevent duplicate operations.",
+                                timestamp=time.time(),
+                                provider_status=504,
+                                provider_message=f"Execution deadline ({OVERALL_EXECUTION_BUDGET_SECONDS}s) expired after read-only tools",
+                                attempt=attempt,
+                                duration_ms=attempt_duration_ms,
+                                has_mutating_tools=False,
+                            )
+                        )
+                        return self._build_partial_execution_response(
+                            session_id=canonical_session.id,
+                            user_id=user_id,
+                            telemetry_events=telemetry_events + attempt_events,
+                            selected_agents=list(attempt_agents),
+                            executed_tools=executed_tools,
+                            error_reason=f"Execution Deadline Exhausted ({round(elapsed_total, 1)}s elapsed)",
+                            attempt_text="".join(attempt_text_parts),
+                            is_mutating=False,
+                            provider_status=504,
+                            provider_message="Execution deadline expired after read-only tools",
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                        )
+
+                    # Safety Check 3: ZERO tools executed -> break to allow deterministic offline fallback
+                    last_error_reason = f"Execution Deadline Exhausted ({round(elapsed_total, 1)}s elapsed of {OVERALL_EXECUTION_BUDGET_SECONDS}s budget)"
+                    last_provider_status = 504
+                    last_provider_message = f"In-flight ADK execution timed out after {round(attempt_duration_ms / 1000.0, 1)}s"
+                    break
+
+                # Ordinary error path (Gemini API error, individual HTTP timeout, etc.)
+                error_info = classify_execution_error(exc)
+                is_retryable = error_info.is_retryable
+                last_provider_status = error_info.status_code
+                last_provider_message = error_info.provider_message
+
+                if error_info.provider_message and error_info.provider_message != error_info.category:
+                    last_error_reason = f"{error_info.category} - {error_info.provider_message}"
+                else:
+                    last_error_reason = error_info.category
 
                 # Record attempt failure telemetry
                 telemetry_events.append(
@@ -472,6 +1043,11 @@ class StageAgentService:
                         event_type="retry_failed",
                         message=f"Live attempt {attempt}/{MAX_LIVE_ATTEMPTS} failed: {last_error_reason}",
                         timestamp=time.time(),
+                        provider_status=error_info.status_code,
+                        provider_message=error_info.provider_message,
+                        attempt=attempt,
+                        duration_ms=attempt_duration_ms,
+                        has_mutating_tools=has_executed_mutating_tools,
                     )
                 )
 
@@ -483,6 +1059,11 @@ class StageAgentService:
                             event_type="retry_aborted_mutating_tool",
                             message=f"Live execution halted after mutating tool execution ({', '.join(executed_mutating_tools)}). Automatic retry and fallback are disabled to prevent duplicate side effects.",
                             timestamp=time.time(),
+                            provider_status=error_info.status_code,
+                            provider_message=error_info.provider_message,
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                            has_mutating_tools=True,
                         )
                     )
                     return self._build_partial_execution_response(
@@ -494,6 +1075,10 @@ class StageAgentService:
                         error_reason=last_error_reason,
                         attempt_text="".join(attempt_text_parts),
                         is_mutating=True,
+                        provider_status=error_info.status_code,
+                        provider_message=error_info.provider_message,
+                        attempt=attempt,
+                        duration_ms=attempt_duration_ms,
                     )
 
                 # 2. Read-Only Tool Execution: Halt retries and do NOT trigger deterministic fallback from scratch
@@ -504,6 +1089,11 @@ class StageAgentService:
                             event_type="retry_aborted_partial_execution",
                             message=f"Live retry aborted on attempt {attempt}: partial execution already executed tools ({', '.join(executed_tools)}). Halting to prevent duplicate operations.",
                             timestamp=time.time(),
+                            provider_status=error_info.status_code,
+                            provider_message=error_info.provider_message,
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                            has_mutating_tools=False,
                         )
                     )
                     return self._build_partial_execution_response(
@@ -515,6 +1105,10 @@ class StageAgentService:
                         error_reason=last_error_reason,
                         attempt_text="".join(attempt_text_parts),
                         is_mutating=False,
+                        provider_status=error_info.status_code,
+                        provider_message=error_info.provider_message,
+                        attempt=attempt,
+                        duration_ms=attempt_duration_ms,
                     )
 
                 # 3. No Tools Executed (Specialist handoff or pre-tool intake only): Safe to evaluate retry/fallback
@@ -525,6 +1119,11 @@ class StageAgentService:
                             event_type="non_retryable_error",
                             message=f"Non-retryable error encountered: {last_error_reason}. Live attempts halted.",
                             timestamp=time.time(),
+                            provider_status=error_info.status_code,
+                            provider_message=error_info.provider_message,
+                            attempt=attempt,
+                            duration_ms=attempt_duration_ms,
+                            has_mutating_tools=has_executed_mutating_tools,
                         )
                     )
                     break
@@ -533,7 +1132,42 @@ class StageAgentService:
                     _, suggested_delay = is_temporary_rate_limit(exc)
                     base_delay = suggested_delay if suggested_delay is not None else (INITIAL_RETRY_DELAY * (2 ** (attempt - 1)))
                     backoff = min(MAX_RETRY_DELAY, base_delay + random.uniform(0.05, 0.20))
-                    await asyncio.sleep(backoff)
+
+                    now_mono_backoff = time.monotonic()
+                    elapsed_after_failure = now_mono_backoff - workflow_start_monotonic
+                    remaining_budget = workflow_deadline - now_mono_backoff
+
+                    # Verify remaining budget is sufficient for backoff sleep and subsequent attempt
+                    if remaining_budget <= (backoff + MIN_RETRY_BUDGET_SECONDS):
+                        telemetry_events.append(
+                            AgentExecutionEvent(
+                                agent_name="stage_orchestrator",
+                                event_type="deadline_exhausted",
+                                message=f"Live retry aborted after attempt {attempt}: remaining budget ({round(remaining_budget, 1)}s) is insufficient for backoff ({round(backoff, 2)}s) and next attempt ({MIN_RETRY_BUDGET_SECONDS}s). Exiting retry loop early.",
+                                timestamp=time.time(),
+                                attempt=attempt,
+                                duration_ms=round(elapsed_after_failure * 1000.0, 2),
+                                has_mutating_tools=has_executed_mutating_tools,
+                            )
+                        )
+                        last_error_reason = f"Execution Deadline Exhausted ({round(elapsed_after_failure, 1)}s elapsed of {OVERALL_EXECUTION_BUDGET_SECONDS}s budget)"
+                        break
+
+                    # Clamp backoff to remaining budget above MIN_RETRY_BUDGET_SECONDS
+                    max_allowed_sleep = max(0.0, remaining_budget - MIN_RETRY_BUDGET_SECONDS)
+                    clamped_backoff = min(backoff, max_allowed_sleep)
+
+                    telemetry_events.append(
+                        AgentExecutionEvent(
+                            agent_name="stage_orchestrator",
+                            event_type="retry_backoff",
+                            message=f"Attempt {attempt}/{MAX_LIVE_ATTEMPTS} backing off for {round(clamped_backoff, 2)}s before next attempt...",
+                            timestamp=time.time(),
+                            attempt=attempt,
+                            provider_status=error_info.status_code,
+                        )
+                    )
+                    await asyncio.sleep(clamped_backoff)
 
             finally:
                 # Clean up isolated attempt session
@@ -563,6 +1197,10 @@ class StageAgentService:
                 event_type="offline_fallback_activated",
                 message=f"Live Gemini execution unavailable ({last_error_reason}). Engaging offline deterministic fallback.",
                 timestamp=time.time(),
+                provider_status=last_provider_status,
+                provider_message=last_provider_message,
+                attempt=last_attempt_number,
+                has_mutating_tools=False,
             )
         )
 
@@ -578,6 +1216,8 @@ class StageAgentService:
         self, user_id: str, session: Session, message: str
     ) -> AiCommandResponse:
         """Deterministic ADK specialist routing and tool execution for reliable offline testing."""
+        t_start = time.perf_counter()
+        t_intent_start = time.perf_counter()
         msg_lower = message.lower()
         events_captured: List[AgentExecutionEvent] = []
         selected_agents: List[str] = []
@@ -599,6 +1239,11 @@ class StageAgentService:
         is_stage_match = is_compound or any(k in msg_lower for k in ["find", "stage", "venue", "spaces", "perform", "acoustic"])
         is_civic_assist = is_compound or any(k in msg_lower for k in ["permission", "permit", "park", "amphitheatre", "checklist", "letter", "curfew", "noise"])
         is_impact_flow = any(k in msg_lower for k in ["contribution", "campaign", "impact", "ledger", "allocate", "allocation", "pledge", "fundraising", "education"])
+
+        t_intent_end = time.perf_counter()
+        intent_ms = (t_intent_end - t_intent_start) * 1000.0
+        tool_ms = 0.0
+        rag_ms = 0.0
 
         response_sections: List[str] = []
         target_venue = None
@@ -1018,6 +1663,21 @@ class StageAgentService:
             )
         )
 
+        total_ms = (time.perf_counter() - t_start) * 1000.0
+        self.record_latency(total_ms, {
+            "intent_classification": intent_ms,
+            "specialist_tools": tool_ms,
+            "rag_retrieval": rag_ms,
+            "total": total_ms,
+        })
+        perf_metrics = PerformanceMetrics(
+            intent_classification_ms=round(intent_ms, 2),
+            specialist_tool_execution_ms=round(tool_ms, 2),
+            rag_retrieval_ms=round(rag_ms, 2),
+            total_duration_ms=round(total_ms, 2),
+            routing_type="deterministic_fast_path",
+        )
+
         return AiCommandResponse(
             session_id=session.id,
             final_response=final_response,
@@ -1025,6 +1685,7 @@ class StageAgentService:
             execution_status="completed",
             execution_mode="offline_deterministic",
             agent_execution_events=events_captured,
+            performance_metrics=perf_metrics,
             model_used=f"Google ADK / {settings.ai_model} (offline deterministic mode - GEMINI_API_KEY not configured)" if not settings.gemini_api_key else f"Google ADK / {settings.ai_model} (mock test mode)",
             created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
         )

@@ -1,21 +1,32 @@
 import json
 from app.database import get_db
+from app.services.auth import hash_password
 
 def seed_database():
     with get_db() as conn:
         cursor = conn.cursor()
 
+        # Generate default demo password hash using bcrypt
+        default_pw_hash = hash_password("stage2026")
+
         # 1. Users
         users = [
-            ("usr-aarav", "Aarav Mehta", "aarav@stage.live", "performer", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80", "Classical Indian sitarist pairing ragas with baroque French cello."),
-            ("usr-heritage", "Priya Sanghavi", "priya@heritagestages.live", "provider", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80", "Curator of heritage brick lofts and community spaces."),
-            ("usr-rhea", "Rhea Sen", "rhea.sen@example.com", "audience", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80", "Independent art patron and supporter of youth music programs."),
-            ("usr-delta", "Delta Melody Foundation", "organizer@deltamelody.org", "organiser", "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=160&auto=format&fit=crop&q=80", "Grassroots cultural non-profit mobilizing instruments for rural schools."),
+            ("usr-aarav", "Aarav Mehta", "aarav@stage.live", "performer", default_pw_hash, "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80", "Classical Indian sitarist pairing ragas with baroque French cello."),
+            ("usr-heritage", "Priya Sanghavi", "priya@heritagestages.live", "provider", default_pw_hash, "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80", "Curator of heritage brick lofts and community spaces."),
+            ("usr-rhea", "Rhea Sen", "rhea.sen@example.com", "audience", default_pw_hash, "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80", "Independent art patron and supporter of youth music programs."),
+            ("usr-delta", "Delta Melody Foundation", "organizer@deltamelody.org", "organiser", default_pw_hash, "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=160&auto=format&fit=crop&q=80", "Grassroots cultural non-profit mobilizing instruments for rural schools."),
+            ("usr-admin", "STAGE Admin & Demo Lead", "admin@stage.live", "admin", default_pw_hash, "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=160&auto=format&fit=crop&q=80", "Platform administrator with multi-role demonstration access."),
         ]
         cursor.executemany("""
-        INSERT OR IGNORE INTO users (id, name, email, role, avatar_url, bio)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT OR IGNORE INTO users (id, name, email, role, password_hash, avatar_url, bio)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
         """, users)
+
+        # Update existing demo users if their password_hash is null
+        cursor.execute("SELECT id FROM users WHERE password_hash IS NULL;")
+        null_rows = cursor.fetchall()
+        for r in null_rows:
+            cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?;", (default_pw_hash, r["id"]))
 
         # 2. Performer profiles
         performers = [

@@ -10,11 +10,21 @@ import {
 } from "@/components/ui/Icons";
 import { Badge } from "@/components/ui/Badge";
 import { CreateCampaignModal } from "@/components/dashboard/CreateCampaignModal";
+import { LedgerDetailsModal } from "@/components/dashboard/LedgerDetailsModal";
+import { OrganiserImpactFlowCopilot } from "@/components/dashboard/OrganiserImpactFlowCopilot";
 import { useStageStore } from "@/context/StageStoreContext";
+import { LedgerEntry } from "@/types";
 
 export default function CauseOrganiserDashboardPage() {
   const { causes, ledger } = useStageStore();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedLedgerEntry, setSelectedLedgerEntry] = useState<LedgerEntry | null>(null);
+  const [preFillData, setPreFillData] = useState<{
+    title?: string;
+    focusArea?: string;
+    targetAmount?: number;
+    description?: string;
+  } | undefined>(undefined);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [impactSummaryGenerated, setImpactSummaryGenerated] = useState(false);
 
@@ -92,44 +102,90 @@ export default function CauseOrganiserDashboardPage() {
 
         {/* Global Impact Numbers (Explicitly Identified as Simulated) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 mt-6 border-t border-[#F4F2EC]">
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center gap-1">
-              <span>Total Mobilized</span>
-              <span className="text-[9px] lowercase text-[#8E897F]">(demo)</span>
+          <button
+            type="button"
+            onClick={() => document.getElementById("settlement-ledger")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View settlement transfer ledger"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#191817] flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <span>Total Mobilized</span>
+                <span className="text-[9px] lowercase text-[#8E897F]">(simulated)</span>
+              </span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               ₹{totalRaised.toLocaleString()}
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Active Campaigns
+          </button>
+
+          <button
+            type="button"
+            onClick={() => document.getElementById("active-campaigns")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View grassroots campaign pools"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#C85A32] flex items-center justify-between">
+              <span>Active Campaigns</span>
+              <span className="text-[10px] text-[#C85A32] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#C85A32]">
+            <div className="font-editorial text-2xl font-bold text-[#C85A32] mt-0.5">
               {causes.length} Active
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Ledger Entries
+          </button>
+
+          <button
+            type="button"
+            onClick={() => document.getElementById("settlement-ledger")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="View ledger transfer audits"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] group-hover:text-[#191817] flex items-center justify-between">
+              <span>Ledger Entries</span>
+              <span className="text-[10px] text-[#8E897F] opacity-0 group-hover:opacity-100 transition-opacity">↓ View</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#191817]">
+            <div className="font-editorial text-2xl font-bold text-[#191817] mt-0.5">
               {ledger.length} Transfers
             </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase text-[#8E897F]">
-              Allocation Verification
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setToastMessage(
+                "Deterministic 70/20/10 Allocation: 70% direct project resources, 20% artist stewardship, 10% statutory compliance reserves."
+              )
+            }
+            className="text-left p-3 -m-3 rounded-xl hover:bg-[#F4F2EC]/60 transition-all focus:outline-none focus:ring-2 focus:ring-[#C85A32]/30 group cursor-pointer"
+            title="Click to view 70/20/10 formula explanation"
+          >
+            <div className="text-[11px] font-mono uppercase text-[#8E897F] flex items-center justify-between">
+              <span>Allocation Rule</span>
+              <span className="text-[10px] text-[#2D6638] opacity-0 group-hover:opacity-100 transition-opacity">ℹ Info</span>
             </div>
-            <div className="font-editorial text-2xl font-bold text-[#2D6638]">
-              100% Simulated
+            <div className="font-editorial text-2xl font-bold text-[#2D6638] mt-0.5">
+              70/20/10 Rule
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
+      {/* In-Workspace AI Capabilities: 70/20/10 Allocation, Civic Fundraising Permits, and Campaign Drafter */}
+      <OrganiserImpactFlowCopilot
+        onPreFillCampaignModal={(title, focus, target, desc) => {
+          setPreFillData({
+            title,
+            focusArea: focus,
+            targetAmount: target,
+            description: desc,
+          });
+          setIsCreateOpen(true);
+        }}
+      />
+
       {/* Section 1: Active Campaigns & Progress Tracking */}
-      <section className="space-y-4">
+      <section id="active-campaigns" className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-editorial text-xl sm:text-2xl font-medium text-[#191817]">
@@ -139,7 +195,7 @@ export default function CauseOrganiserDashboardPage() {
               Real-time progress of social impact pools fueled by live performance pledges.
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="status" size="sm">
             Live Pools
           </Badge>
         </div>
@@ -293,7 +349,7 @@ export default function CauseOrganiserDashboardPage() {
 
             <div className="p-3 bg-[#F4F2EC] rounded-xl text-[11px] text-[#6B665E] flex items-center justify-between">
               <span>Verified unit formulas: ₹8k/instrument · ₹1.5k/workshop hr · ₹25k/bard stipend · ₹120k/solar rig</span>
-              <Badge variant="demo" size="sm">Deterministic Formula</Badge>
+              <Badge variant="status" size="sm">Deterministic Formula</Badge>
             </div>
           </div>
         ) : (
@@ -307,17 +363,17 @@ export default function CauseOrganiserDashboardPage() {
       </section>
 
       {/* Section 3: Transparent Contribution Allocation Ledger */}
-      <section className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E8E5DC] shadow-2xs space-y-4">
+      <section id="settlement-ledger" className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E8E5DC] shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="font-editorial text-xl font-medium text-[#191817]">
               Transparent Contribution Ledger
             </h2>
             <p className="text-xs text-[#6B665E]">
-              Simulated real-time record of all ticket pledge transfers from verified performance events.
+              Simulated real-time record of all ticket pledge transfers from verified performance events. Click any entry to inspect audited 70/20/10 allocations.
             </p>
           </div>
-          <Badge variant="demo" size="sm">
+          <Badge variant="outline" size="sm">
             Audited Simulation
           </Badge>
         </div>
@@ -333,13 +389,19 @@ export default function CauseOrganiserDashboardPage() {
                 <th className="py-2.5 font-medium">Gross Proceeds</th>
                 <th className="py-2.5 font-medium">Pledge %</th>
                 <th className="py-2.5 font-medium">Transferred to Pool</th>
+                <th className="py-2.5 font-medium text-right">Audit</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F4F2EC] text-[#5A554D]">
               {ledger.map((entry) => (
-                <tr key={entry.id}>
+                <tr
+                  key={entry.id}
+                  onClick={() => setSelectedLedgerEntry(entry)}
+                  className="hover:bg-[#FBF0EB]/40 transition-colors cursor-pointer group"
+                  title="Click to inspect cryptographic ledger proof & exact 70/20/10 split"
+                >
                   <td className="py-3 font-mono">{entry.date}</td>
-                  <td className="py-3 font-medium text-[#191817]">{entry.causeTitle}</td>
+                  <td className="py-3 font-medium text-[#191817] group-hover:text-[#C85A32]">{entry.causeTitle}</td>
                   <td className="py-3">
                     <div className="text-[#191817] font-medium">{entry.eventTitle}</div>
                     <div className="text-[10px] text-[#8E897F]">{entry.performerName}</div>
@@ -350,6 +412,11 @@ export default function CauseOrganiserDashboardPage() {
                   <td className="py-3 font-semibold text-[#2D6638]">
                     ₹{entry.impactAmount.toLocaleString()} (Simulated)
                   </td>
+                  <td className="py-3 text-right">
+                    <span className="text-[10px] text-[#C85A32] font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                      Inspect →
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -357,12 +424,25 @@ export default function CauseOrganiserDashboardPage() {
         </div>
       </section>
 
-      {/* Create Campaign Modal */}
+      {/* Create Campaign Modal with AI Prefill & Explicit Confirmation */}
       <CreateCampaignModal
         isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setPreFillData(undefined);
+        }}
         onSuccessToast={handleCampaignCreated}
+        initialValues={preFillData}
       />
+
+      {/* Ledger Transaction Details Modal */}
+      {selectedLedgerEntry && (
+        <LedgerDetailsModal
+          entry={selectedLedgerEntry}
+          isOpen={true}
+          onClose={() => setSelectedLedgerEntry(null)}
+        />
+      )}
     </div>
   );
 }

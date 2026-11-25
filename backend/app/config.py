@@ -25,5 +25,32 @@ class Settings(BaseModel):
     gemini_api_key: str | None = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     ai_model: str = os.getenv("STAGE_AI_MODEL", "gemini-2.5-flash")
 
+    # Redis Venue Search Cache
+    redis_url: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    venue_cache_ttl_seconds: int = int(os.getenv("VENUE_CACHE_TTL_SECONDS", "300"))
+
+    # Apache Kafka Configuration
+    kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:9092")
+    kafka_topic: str = os.getenv("KAFKA_TOPIC", "stage.events")
+    kafka_outbox_poll_interval_seconds: float = float(os.getenv("KAFKA_OUTBOX_POLL_INTERVAL_SECONDS", "0.5"))
+    kafka_outbox_batch_size: int = int(os.getenv("KAFKA_OUTBOX_BATCH_SIZE", "50"))
+    kafka_enabled: bool = os.getenv("KAFKA_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def REDIS_URL(self) -> str:
+        return self.redis_url
+
+    @property
+    def VENUE_CACHE_TTL_SECONDS(self) -> int:
+        return self.venue_cache_ttl_seconds
+
+    @property
+    def KAFKA_BOOTSTRAP_SERVERS(self) -> str:
+        return self.kafka_bootstrap_servers
+
+    @property
+    def KAFKA_TOPIC(self) -> str:
+        return self.kafka_topic
+
 settings = Settings()
 
